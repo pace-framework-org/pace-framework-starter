@@ -1,0 +1,303 @@
+"""PACE Reporter — writes job summaries and updates PROGRESS.md after each cycle."""
+
+import os
+import sys
+import yaml
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from advisory import load_open_backlog
+from config import load_config
+
+REPO_ROOT = Path(__file__).parent.parent
+PACE_DIR = REPO_ROOT / ".pace"
+PROGRESS_FILE = REPO_ROOT / "PROGRESS.md"
+PLAN_FILE = Path(__file__).parent / "plan.yaml"
+
+RESULT_ICON = {"SHIP": "✅", "HOLD": "🔴", "ABORT": "⚠️", "PENDING": "⏳"}
+
+
+def _load_plan() -> dict:
+    with open(PLAN_FILE) as f:
+        return yaml.safe_load(f)
+
+
+def _load_day_artifacts(day: int) -> tuple[dict | None, dict | None, dict | None]:
+    """Return (story_card, handoff, gate_report) for a given day, or None if missing."""
+    day_dir = PACE_DIR / f"day-{day}"
+    story, handoff, gate = None, None, None
+    if (day_dir / "story.md").exists():
+        story = yaml.safe_load((day_dir / "story.md").read_text())
+    if (day_dir / "handoff.md").exists():
+        handoff = yaml.safe_load((day_dir / "handoff.md").read_text())
+    if (day_dir / "gate.md").exists():
+        gate = yaml.safe_load((day_dir / "gate.md").read_text())
+    return story, handoff, gate
+
+
+def _count_stats(max_day: int) -> dict:
+    shipped, held, aborted, deferred_total, escalated = 0, 0, 0, 0, 0
+    for d in range(1, max_day + 1):
+        _, _, gate = _load_day_artifacts(d)
+        if gate is None:
+            continue
+        decision = gate.get("gate_decision")
+        if decision == "SHIP":
+            shipped += 1
+            deferred_total += len(gate.get("deferred", []))
+        elif decision == "HOLD":
+            held += 1
+        escalation_file = PACE_DIR / f"day-{d}" / "escalated"
+        if escalation_file.exists():
+            escalated += 1
+    return {
+        "shipped": shipped,
+        "held": held,
+        "deferred": deferred_total,
+        "escalated": escalated,
+    }
+
+
+def write_job_summary(
+    day: int,
+    outcome: str,
+    story_card: dict | None,
+    gate_report: dict | None,
+    sentinel_report: dict | None = None,
+    conduit_report: dict | None = None,
+    abort_reason: str = "",
+    platform=None,
+) -> None:
+    """Build the job summary markdown and deliver it via the platform adapter.
+
+    If platform is None, falls back to writing $GITHUB_STEP_SUMMARY directly
+    (backward-compatible with GitHub Actions without an adapter).
+    """
+
+    cfg = load_config()
+    icon = RESULT_ICON.get(outcome, "❓")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    stats = _count_stats(day)
+    total_days = cfg.sprint_duration_days
+    ship_rate = f"{(stats['shipped'] / day * 100):.0f}%" if day > 0 else "N/A"
+
+    lines = [
+        f"# PACE Day {day} — {icon} {outcome}",
+        f"",
+        f"**Product:** {cfg.product_name}  ",
+        f"**Run time:** {now}  ",
+        f"**Overall progress:** {stats['shipped']}/{day} days shipped ({ship_rate} SHIP rate)",
+        f"",
+    ]
+
+    if outcome == "ABORT":
+        lines += [
+            f"## ⚠️ Cycle Aborted — Infrastructure Failure",
+            f"",
+            f"```",
+            abort_reason[:1000],
+            f"```",
+            f"",
+            f"> This is not a FORGE/GATE hold. Fix the underlying issue and re-run Day {day}.",
+        ]
+    else:
+        if story_card:
+            lines += [
+                f"## Story Card",
+                f"",
+                f"**{story_card.get('story', 'N/A')}**",
+                f"",
+                f"| Field | Value |",
+                f"| --- | --- |",
+                f"| Given | {story_card.get('given', '')} |",
+                f"| When | {story_card.get('when', '')} |",
+                f"| Then | {story_card.get('then', '')} |",
+                f"",
+                f"**Acceptance criteria:**",
+                f"",
+            ]
+            for criterion in story_card.get("acceptance", []):
+                lines.append(f"- {criterion}")
+            lines.append("")
+
+        if gate_report:
+            lines += [f"## Gate Report — {icon} {outcome}", f""]
+            for cr in gate_report.get("criteria_results", []):
+                r = cr.get("result", "?")
+                r_icon = "✅" if r == "PASS" else ("⚠️" if r == "PARTIAL" else "❌")
+                lines.append(f"- {r_icon} **{r}** — {cr.get('criterion', '')}")
+                lines.append(f"  - *Evidence:* {cr.get('evidence', '')}")
+            lines.append("")
+
+            if gate_report.get("blockers"):
+                lines += [f"**Blockers:**", ""]
+                for b in gate_report["blockers"]:
+                    lines.append(f"- ❌ {b}")
+                lines.append("")
+
+            if gate_report.get("deferred"):
+                lines += [f"**Deferred (accepted):**", ""]
+                for d in gate_report["deferred"]:
+                    lines.append(f"- ⏭️ {d}")
+                lines.append("")
+
+            if outcome == "HOLD" and gate_report.get("hold_reason"):
+                lines += [
+                    f"**Hold reason for FORGE:**",
+                    f"",
+                    f"> {gate_report['hold_reason']}",
+                    f"",
+                ]
+
+        def _render_agent_report(report: dict, decision_key: str, label: str) -> None:
+            decision = report.get(decision_key, "?")
+            d_icon = "✅" if decision == "SHIP" else ("⚠️" if decision == "ADVISORY" else "❌")
+            lines += [f"## {label} — {d_icon} {decision}", ""]
+            for finding in report.get("findings", []):
+                r = finding.get("result", "?")
+                r_icon = "✅" if r == "PASS" else ("⚠️" if r == "ADVISORY" else "❌")
+                lines.append(f"- {r_icon} **{r}** — {finding.get('check', '')}")
+                lines.append(f"  - *Evidence:* {finding.get('evidence', '')}")
+            lines.append("")
+            if report.get("advisories"):
+                lines += ["**Advisories (backlocked):**", ""]
+                for a in report["advisories"]:
+                    lines.append(f"- ⚠️ {a}")
+                lines.append("")
+            if report.get("blockers"):
+                lines += ["**Blockers:**", ""]
+                for b in report["blockers"]:
+                    lines.append(f"- ❌ {b}")
+                lines.append("")
+            if decision in ("HOLD", "ADVISORY") and report.get("hold_reason"):
+                lines += ["**Hold reason for FORGE:**", "", f"> {report['hold_reason']}", ""]
+
+        if sentinel_report:
+            _render_agent_report(sentinel_report, "sentinel_decision", "SENTINEL Report")
+        if conduit_report:
+            _render_agent_report(conduit_report, "conduit_decision", "CONDUIT Report")
+
+    open_advisories = len(load_open_backlog())
+    lines += [
+        f"---",
+        f"",
+        f"| Metric | Value |",
+        f"| --- | --- |",
+        f"| Days complete | {stats['shipped']} / {total_days} |",
+        f"| SHIP rate | {ship_rate} |",
+        f"| Deferred items | {stats['deferred']} |",
+        f"| Escalated holds | {stats['escalated']} |",
+        f"| Open advisories | {open_advisories} |",
+    ]
+
+    markdown = "\n".join(lines)
+
+    if platform is not None:
+        platform.write_job_summary(markdown)
+        return
+
+    # Fallback: write directly to $GITHUB_STEP_SUMMARY (no adapter configured)
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with open(summary_path, "w") as f:
+            f.write(markdown)
+
+
+def update_progress_md(current_day: int) -> None:
+    """Rewrite PROGRESS.md with the current state of all completed days."""
+    cfg = load_config()
+    plan = _load_plan()
+    plan_by_day = {d["day"]: d for d in plan["days"]}
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    total_days = cfg.sprint_duration_days
+
+    rows = []
+    shipped_count = 0
+    deferred_total = 0
+    escalated_count = 0
+
+    for day in range(1, total_days + 1):
+        day_plan = plan_by_day.get(day, {})
+        story, handoff, gate = _load_day_artifacts(day)
+
+        if gate is None and day > current_day:
+            rows.append((day, "", day_plan.get("target", "")[:60], "PENDING", ""))
+            continue
+
+        if gate is None and day <= current_day:
+            rows.append((day, "", day_plan.get("target", "")[:60], "IN PROGRESS", ""))
+            continue
+
+        decision = gate.get("gate_decision", "?")
+        deferred = gate.get("deferred", [])
+        deferred_total += len(deferred)
+
+        escalation_file = PACE_DIR / f"day-{day}" / "escalated"
+        if escalation_file.exists():
+            escalated_count += 1
+
+        if decision == "SHIP":
+            shipped_count += 1
+
+        notes = "; ".join(deferred) if deferred else ""
+        rows.append((day, now if day == current_day else "", day_plan.get("target", "")[:60], decision, notes[:80]))
+
+    ship_rate = f"{(shipped_count / current_day * 100):.0f}%" if current_day > 0 else "0%"
+    open_advisories = len(load_open_backlog())
+
+    lines = [
+        f"# {cfg.product_name} — PACE Sprint Progress",
+        "",
+        f"**Started:** {plan.get('start_date', 'TBD')}  ",
+        f"**Last updated:** {now}  ",
+        f"**Target:** {total_days}-day sprint",
+        "",
+        "## Summary",
+        "",
+        "| Metric | Value |",
+        "| --- | --- |",
+        f"| Days complete | {shipped_count} / {total_days} |",
+        f"| SHIP rate | {ship_rate} |",
+        f"| Deferred items | {deferred_total} |",
+        f"| Escalated holds | {escalated_count} |",
+        f"| Open advisories | {open_advisories} |",
+        "",
+        "## Day Log",
+        "",
+        "| Day | Story | Decision | Notes |",
+        "| --- | --- | --- | --- |",
+    ]
+
+    for day, _, target, decision, notes in rows:
+        icon = RESULT_ICON.get(decision, "⏳")
+        lines.append(f"| {day} | {target} | {icon} {decision} | {notes} |")
+
+    lines += [
+        "",
+        "---",
+        "",
+        "## Weekly Breakdown",
+        "",
+    ]
+
+    # Group by week field from plan
+    weeks_seen = sorted({plan_by_day.get(r[0], {}).get("week", 0) for r in rows if plan_by_day.get(r[0], {}).get("week")})
+    for week in weeks_seen:
+        week_days = [r for r in rows if plan_by_day.get(r[0], {}).get("week") == week]
+        if not week_days:
+            continue
+        week_shipped = sum(1 for r in week_days if r[3] == "SHIP")
+        week_total = len([r for r in week_days if r[3] not in ("PENDING",)])
+        week_label = plan_by_day.get(week_days[0][0], {}).get("week_label", f"Week {week}")
+        lines.append(f"### Week {week}" + (f" — {week_label}" if week_label != f"Week {week}" else ""))
+        lines.append("")
+        if week_total > 0:
+            lines.append(f"**{week_shipped}/{week_total} days shipped**")
+            lines.append("")
+        for day, _, target, decision, notes in week_days:
+            icon = RESULT_ICON.get(decision, "⏳")
+            lines.append(f"- Day {day}: {icon} {target}")
+        lines.append("")
+
+    PROGRESS_FILE.write_text("\n".join(lines))

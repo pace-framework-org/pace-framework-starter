@@ -1,0 +1,116 @@
+# PACE Framework Configuration
+# Fill in all values before running Day 1.
+# This file is the only place where project-specific information lives.
+# All agents (PRIME, FORGE, GATE, SENTINEL, CONDUIT, SCRIBE) read from here.
+
+framework_version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Product identity — injected into every agent's system prompt
+# ---------------------------------------------------------------------------
+product:
+  name: "My Product"                    # Short product name used in prompts
+  description: >                        # One-paragraph description for agents
+    A brief description of what this product does,
+    who it's for, and what problem it solves.
+  github_org: "my-org"                  # GitHub organization (used for CI, URLs)
+
+# ---------------------------------------------------------------------------
+# Sprint configuration
+# ---------------------------------------------------------------------------
+sprint:
+  duration_days: 30                     # Total days in the sprint
+
+# ---------------------------------------------------------------------------
+# Source code — FORGE only writes into the directories listed here.
+# Paths are relative to the repo root.
+# ---------------------------------------------------------------------------
+source:
+  dirs:
+    - name: "core"                      # Short label (used internally)
+      path: "src/"                      # Path relative to repo root
+      language: "Python"                # Primary language in this directory
+      description: "Core application source"
+
+    # Add more directories as needed:
+    # - name: "cli"
+    #   path: "cli/"
+    #   language: "Go"
+    #   description: "CLI binary"
+
+  # Optional: path to an external documentation folder for SCRIBE.
+  # SCRIBE reads product/engineering/security/devops docs from here
+  # to generate informed context documents for other agents.
+  # Can be relative (resolved from the repo root's parent directory) or absolute.
+  # Leave as null if you don't have external docs — SCRIBE will work from the repo alone.
+  docs_dir: null
+  # docs_dir: "../my-docs/my-project"
+
+# ---------------------------------------------------------------------------
+# Technology stack — used in agent prompts and GATE test runner
+# ---------------------------------------------------------------------------
+tech:
+  primary_language: "Python 3.12"       # Primary language FORGE writes
+  secondary_language: null              # Optional (e.g. "Go 1.22" for CLI)
+  ci_system: "GitHub Actions"
+
+  # Command GATE runs to execute the test suite (from repo root)
+  test_command: "pytest -v --tb=short"
+
+  # Optional build command run before tests
+  build_command: null
+  # build_command: "go build ./..."
+
+# ---------------------------------------------------------------------------
+# Platform — CI/CD and Git hosting integration
+# ---------------------------------------------------------------------------
+platform:
+  # Supported values: github | gitlab | bitbucket | jenkins | local
+  #
+  #   github    — GitHub Actions CI + GitHub API (PRs, Issues)
+  #               Env vars: GITHUB_TOKEN, GITHUB_REPOSITORY
+  #
+  #   gitlab    — GitLab CI pipelines + GitLab API (MRs, Issues)
+  #               Env vars: GITLAB_TOKEN, GITLAB_PROJECT, GITLAB_URL (optional)
+  #
+  #   bitbucket — Bitbucket Cloud Pipelines + Bitbucket API (PRs, Issues)
+  #               Env vars: BITBUCKET_USER, BITBUCKET_APP_PASSWORD,
+  #                         BITBUCKET_WORKSPACE, BITBUCKET_REPO_SLUG
+  #               Note: Issues must be enabled on the repo; Pipelines must be on.
+  #
+  #   jenkins   — Jenkins REST API for CI polling; PR/issue written to local files
+  #               Env vars: JENKINS_URL, JENKINS_USER, JENKINS_TOKEN, JENKINS_JOB_NAME
+  #
+  #   local     — No platform; CI skipped; PR/issue artifacts written to .pace/
+  #               No env vars required
+  type: github
+
+# ---------------------------------------------------------------------------
+# LLM — AI provider and model for all PACE agents
+# ---------------------------------------------------------------------------
+llm:
+  # provider: anthropic (default) | litellm
+  #
+  #   anthropic — Use the Anthropic SDK directly.
+  #               Env var: ANTHROPIC_API_KEY
+  #               Models: claude-sonnet-4-6 | claude-opus-4-6 | claude-haiku-4-5-20251001
+  #
+  #   litellm   — Route to any provider via LiteLLM.
+  #               Set model with a provider prefix (see examples below).
+  #               Env var: provider's own key (e.g. OPENAI_API_KEY, GEMINI_API_KEY)
+  #
+  provider: anthropic
+  model: claude-sonnet-4-6
+
+  # LiteLLM model examples (uncomment and set provider: litellm to use):
+  # model: openai/gpt-4o                              # OpenAI (OPENAI_API_KEY)
+  # model: openai/o3-mini                             # OpenAI o3-mini
+  # model: gemini/gemini-2.0-flash                    # Google Gemini (GEMINI_API_KEY)
+  # model: bedrock/anthropic.claude-sonnet-4-6        # AWS Bedrock (AWS_* env vars)
+  # model: azure/gpt-4o                               # Azure OpenAI (AZURE_* env vars)
+  # model: groq/llama-3.1-70b-versatile               # Groq (GROQ_API_KEY)
+  # model: mistral/mistral-large-latest               # Mistral (MISTRAL_API_KEY)
+  # model: ollama/llama3.1                            # Local Ollama (no key needed)
+
+  # base_url: null   # Optional endpoint override (e.g. for self-hosted Ollama)
+  # base_url: "http://localhost:11434"

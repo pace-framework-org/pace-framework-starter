@@ -1,0 +1,77 @@
+name: PACE Daily Cycle
+
+on:
+  schedule:
+    # Runs at 09:00 UTC on weekdays. Adjust to your team's timezone.
+    - cron: "0 9 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "PACE day number to run (overrides PACE_DAY from schedule)"
+        required: false
+        type: string
+
+permissions:
+  contents: write       # push .pace/ artifacts and PROGRESS.md
+  issues: write         # open escalation issues
+  pull-requests: write  # open review gate PRs
+
+jobs:
+  pace:
+    name: "PACE Day ${{ inputs.day || vars.PACE_DAY }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for git log / baseline reads
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "PACE Orchestrator"
+          git config user.email "pace@${{ github.repository_owner }}.github"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pace/requirements.txt
+
+      - name: Install PACE dependencies
+        run: pip install -r pace/requirements.txt
+
+      # ---------------------------------------------------------------------------
+      # Optional: set up your project's build environment here.
+      # Examples:
+      #
+      # - name: Set up Go
+      #   uses: actions/setup-go@v5
+      #   with:
+      #     go-version-file: go.mod
+      #
+      # - name: Set up Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: "20"
+      #     cache: npm
+      #
+      # - name: Install project dependencies
+      #   run: npm ci
+      # ---------------------------------------------------------------------------
+
+      - name: Run PACE cycle
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PACE_DAY: ${{ inputs.day || vars.PACE_DAY }}
+          PACE_PAUSED: ${{ vars.PACE_PAUSED || 'false' }}
+        run: python pace/orchestrator.py
+
+      - name: Write job summary
+        if: always()
+        run: echo "See PACE job step summary for details." >> $GITHUB_STEP_SUMMARY

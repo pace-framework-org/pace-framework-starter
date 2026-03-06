@@ -1,0 +1,11 @@
+PyYAML>=6.0
+jsonschema>=4.23.0
+
+# LLM providers — install the one matching your llm.provider in pace.config.yaml:
+anthropic>=0.40.0      # llm.provider: anthropic (default)
+litellm>=1.40.0        # llm.provider: litellm (covers OpenAI, Gemini, Bedrock, Ollama, etc.)
+
+# Platform adapters — install only what you need for your platform.type:
+PyGithub>=2.1.1        # platform.type: github
+python-gitlab>=4.0     # platform.type: gitlab
+requests>=2.31.0       # platform.type: bitbucket or jenkins

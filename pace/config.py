@@ -1,0 +1,122 @@
+"""PACE Framework configuration loader.
+
+Reads pace.config.yaml and exposes a PaceConfig dataclass used by all agents.
+Call load_config() once per agent invocation — it is fast (cached after first call).
+"""
+
+from __future__ import annotations
+
+import yaml
+from dataclasses import dataclass, field
+from pathlib import Path
+from functools import lru_cache
+
+CONFIG_FILE = Path(__file__).parent / "pace.config.yaml"
+REPO_ROOT = Path(__file__).parent.parent
+
+
+@dataclass
+class SourceDir:
+    name: str        # Short label (e.g. "core", "cli")
+    path: str        # Relative path from repo root (e.g. "src/")
+    language: str    # Primary language (e.g. "Python", "Go")
+    description: str # One-line description
+
+
+@dataclass
+class TechConfig:
+    primary_language: str
+    secondary_language: str | None
+    ci_system: str
+    test_command: str
+    build_command: str | None
+
+
+@dataclass
+class LLMConfig:
+    provider: str        # "anthropic" | "litellm"
+    model: str           # model ID (e.g. "claude-sonnet-4-6", "openai/gpt-4o")
+    base_url: str | None # optional endpoint override (e.g. for Ollama)
+
+
+@dataclass
+class PaceConfig:
+    product_name: str
+    product_description: str
+    github_org: str
+    sprint_duration_days: int
+    source_dirs: list[SourceDir]
+    docs_dir: Path | None       # Absolute path to external docs folder, or None
+    tech: TechConfig
+    platform_type: str          # "github" | "gitlab" | "bitbucket" | "jenkins" | "local"
+    llm: LLMConfig
+
+    def source_dirs_table(self) -> str:
+        """Return a formatted table of source directories for use in agent system prompts."""
+        lines = []
+        for d in self.source_dirs:
+            lines.append(f"  {d.path:<30} {d.language:<12} {d.description}")
+        return "\n".join(lines) if lines else "  (no source directories configured)"
+
+    def source_dirs_names(self) -> str:
+        """Return a comma-separated list of source directory labels."""
+        return ", ".join(d.name for d in self.source_dirs) if self.source_dirs else "(none)"
+
+
+@lru_cache(maxsize=1)
+def load_config() -> PaceConfig:
+    """Load and return the PaceConfig. Cached — safe to call multiple times."""
+    with open(CONFIG_FILE) as f:
+        raw = yaml.safe_load(f)
+
+    product = raw.get("product", {})
+    sprint = raw.get("sprint", {})
+    source = raw.get("source", {})
+    tech_raw = raw.get("tech", {})
+
+    source_dirs = [
+        SourceDir(
+            name=d["name"],
+            path=d["path"],
+            language=d.get("language", ""),
+            description=d.get("description", ""),
+        )
+        for d in source.get("dirs", [])
+    ]
+
+    # Resolve docs_dir: absolute as-is, relative resolved from REPO_ROOT
+    raw_docs_dir = source.get("docs_dir")
+    if raw_docs_dir:
+        p = Path(raw_docs_dir)
+        docs_dir = p if p.is_absolute() else (REPO_ROOT / p).resolve()
+    else:
+        docs_dir = None
+
+    tech = TechConfig(
+        primary_language=tech_raw.get("primary_language", "Python 3.12"),
+        secondary_language=tech_raw.get("secondary_language"),
+        ci_system=tech_raw.get("ci_system", "GitHub Actions"),
+        test_command=tech_raw.get("test_command", "pytest -v --tb=short"),
+        build_command=tech_raw.get("build_command"),
+    )
+
+    platform_raw = raw.get("platform", {})
+    llm_raw = raw.get("llm", {})
+
+    llm = LLMConfig(
+        provider=llm_raw.get("provider", "anthropic"),
+        model=llm_raw.get("model", "claude-sonnet-4-6"),
+        base_url=llm_raw.get("base_url"),
+    )
+
+    return PaceConfig(
+        product_name=product.get("name", "My Product"),
+        product_description=str(product.get("description", "")).strip(),
+        github_org=product.get("github_org", ""),
+        sprint_duration_days=sprint.get("duration_days", 30),
+        source_dirs=source_dirs,
+        docs_dir=docs_dir,
+        tech=tech,
+        platform_type=platform_raw.get("type", "github"),
+        llm=llm,
+    )

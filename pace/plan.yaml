@@ -1,0 +1,244 @@
+# PACE Sprint Plan
+# Edit this file to define your sprint goals.
+# Each entry maps one day to one story target.
+#
+# Fields:
+#   day:           Day number (integer, 1-N)
+#   week:          Week number for grouping in PROGRESS.md
+#   week_label:    Optional label for the week (e.g. "Foundation", "CLI Layer")
+#   target:        What FORGE must deliver — be specific and scope-limited
+#   gate_criterion: The binary test GATE uses to confirm the target is met
+#   human_gate:    Set to true to pause the loop and open a review PR (default: false)
+#   notes:         Optional notes for the human reviewer
+
+pace_version: "1.0"
+product: "My Product"           # Update this to match product.name in pace.config.yaml
+start_date: "2026-01-01"        # Update to your sprint start date
+
+days:
+  # ---------------------------------------------------------------------------
+  # Week 1 — Foundation
+  # ---------------------------------------------------------------------------
+  - day: 1
+    week: 1
+    week_label: "Foundation"
+    target: "Repository scaffold — project initialized, CI pipeline live"
+    gate_criterion: "Build passes in CI"
+    human_gate: false
+
+  - day: 2
+    week: 1
+    week_label: "Foundation"
+    target: "Core module skeleton — main entry point, basic structure, hello-world test passing"
+    gate_criterion: "Test suite runs and passes with at least one test"
+    human_gate: false
+
+  - day: 3
+    week: 1
+    week_label: "Foundation"
+    target: "Feature A — first atomic unit of product functionality"
+    gate_criterion: "Feature A works end-to-end with tests"
+    human_gate: false
+
+  - day: 4
+    week: 1
+    week_label: "Foundation"
+    target: "Feature B — second atomic unit of product functionality"
+    gate_criterion: "Feature B works end-to-end with tests"
+    human_gate: false
+
+  - day: 5
+    week: 1
+    week_label: "Foundation"
+    target: "Feature C — third atomic unit"
+    gate_criterion: "Feature C passes all defined acceptance criteria"
+    human_gate: false
+
+  - day: 6
+    week: 1
+    week_label: "Foundation"
+    target: "Feature D — fourth atomic unit"
+    gate_criterion: "Feature D passes all defined acceptance criteria"
+    human_gate: false
+
+  - day: 7
+    week: 1
+    week_label: "Foundation"
+    target: "Week 1 integration — all features A-D work together end-to-end"
+    gate_criterion: "Integration test covers A→D pipeline; all pass"
+    human_gate: false
+
+  # ---------------------------------------------------------------------------
+  # Week 2 — Core Capabilities
+  # ---------------------------------------------------------------------------
+  - day: 8
+    week: 2
+    week_label: "Core Capabilities"
+    target: "Feature E — primary user-facing operation"
+    gate_criterion: "Feature E functions correctly with tests"
+    human_gate: false
+
+  - day: 9
+    week: 2
+    week_label: "Core Capabilities"
+    target: "Feature F — configuration and policy"
+    gate_criterion: "Config reads correctly; defaults applied when absent"
+    human_gate: false
+
+  - day: 10
+    week: 2
+    week_label: "Core Capabilities"
+    target: "Feature G — data persistence or state"
+    gate_criterion: "Data persists correctly across runs"
+    human_gate: false
+
+  - day: 11
+    week: 2
+    week_label: "Core Capabilities"
+    target: "Feature H — external integration (API, service, or platform)"
+    gate_criterion: "Integration works end-to-end in a test environment"
+    human_gate: false
+
+  - day: 12
+    week: 2
+    week_label: "Core Capabilities"
+    target: "Feature I — user output and reporting"
+    gate_criterion: "Output contains required fields; format is readable"
+    human_gate: false
+
+  - day: 13
+    week: 2
+    week_label: "Core Capabilities"
+    target: "Feature J — additional capability from backlog"
+    gate_criterion: "Feature J acceptance criteria all pass"
+    human_gate: false
+
+  - day: 14
+    week: 2
+    week_label: "Core Capabilities"
+    target: "FORTNIGHTLY REVIEW GATE — human reviews and approves continuation"
+    gate_criterion: "Human approves the review PR"
+    human_gate: true
+    notes: "Prepare a demo of all Week 1-2 features before this gate"
+
+  # ---------------------------------------------------------------------------
+  # Week 3 — Integration & Platform
+  # ---------------------------------------------------------------------------
+  - day: 15
+    week: 3
+    week_label: "Integration & Platform"
+    target: "Platform integration scaffold — connect to target platform or runtime"
+    gate_criterion: "Integration loads without error; inputs defined and accessible"
+    human_gate: false
+
+  - day: 16
+    week: 3
+    week_label: "Integration & Platform"
+    target: "Platform integration execution — invoke core functionality from platform context"
+    gate_criterion: "Core logic executes in platform context and returns correct result"
+    human_gate: false
+
+  - day: 17
+    week: 3
+    week_label: "Integration & Platform"
+    target: "Platform feedback — results surfaced back to the platform (check, comment, annotation)"
+    gate_criterion: "Feedback appears correctly on a test event"
+    human_gate: false
+
+  - day: 18
+    week: 3
+    week_label: "Integration & Platform"
+    target: "Platform idempotency — subsequent runs update rather than duplicate feedback"
+    gate_criterion: "Second run updates existing feedback; no duplication"
+    human_gate: false
+
+  - day: 19
+    week: 3
+    week_label: "Integration & Platform"
+    target: "Failure propagation — platform surface reflects pass/fail outcome correctly"
+    gate_criterion: "A failing case causes the platform event to fail; passing case passes"
+    human_gate: false
+
+  - day: 20
+    week: 3
+    week_label: "Integration & Platform"
+    target: "Configuration wired — all configurable inputs passed through correctly"
+    gate_criterion: "Three configurations produce three different outcomes as expected"
+    human_gate: false
+
+  - day: 21
+    week: 3
+    week_label: "Integration & Platform"
+    target: "Week 3 integration — full lifecycle test on a real event"
+    gate_criterion: "All week 3 features work together in a real end-to-end scenario"
+    human_gate: false
+
+  # ---------------------------------------------------------------------------
+  # Week 4 — Hardening & Design Partner Readiness
+  # ---------------------------------------------------------------------------
+  - day: 22
+    week: 4
+    week_label: "Hardening"
+    target: "Error handling — all error paths produce clear, actionable messages"
+    gate_criterion: "10 error scenarios each produce a human-readable message; no stack traces"
+    human_gate: false
+
+  - day: 23
+    week: 4
+    week_label: "Hardening"
+    target: "Edge case coverage — handle malformed input, missing data, and boundary conditions"
+    gate_criterion: "Each edge case has a test that passes"
+    human_gate: false
+
+  - day: 24
+    week: 4
+    week_label: "Hardening"
+    target: "Audit and observability — logging, tracing, or audit trail for key operations"
+    gate_criterion: "Key operations are logged with correct context; output is parseable"
+    human_gate: false
+
+  - day: 25
+    week: 4
+    week_label: "Hardening"
+    target: "Onboarding validation — a new user can complete setup in under 30 minutes using README"
+    gate_criterion: "Simulated onboarding time is 30 minutes or less following README only"
+    human_gate: false
+
+  - day: 26
+    week: 4
+    week_label: "Hardening"
+    target: "Security sandbox — verify isolation, no credential leakage, no side effects"
+    gate_criterion: "Each security constraint verified with a test case"
+    human_gate: false
+
+  - day: 27
+    week: 4
+    week_label: "Hardening"
+    target: "Documentation complete — help text covers all commands; README covers full setup"
+    gate_criterion: "User can onboard from README alone without asking questions"
+    human_gate: false
+
+  - day: 28
+    week: 4
+    week_label: "Hardening"
+    target: "FORTNIGHTLY REVIEW GATE — human reviews full end-to-end and approves design partner handoff"
+    gate_criterion: "Human approves review PR; design partner handoff materials confirmed"
+    human_gate: true
+    notes: "Prepare onboarding package before this gate"
+
+  # ---------------------------------------------------------------------------
+  # Days 29-30 — Design Partner Handoff
+  # ---------------------------------------------------------------------------
+  - day: 29
+    week: 5
+    week_label: "Design Partner Handoff"
+    target: "Design partner onboarding package — README, config template, integration snippet, walkthrough"
+    gate_criterion: "All four artifacts exist and are correct"
+    human_gate: false
+
+  - day: 30
+    week: 5
+    week_label: "Design Partner Handoff"
+    target: "Design partner kickoff preparation — known limitations document, deferred items with workarounds"
+    gate_criterion: "Limitations document lists all deferred items with workarounds; under 1 page"
+    human_gate: false
