@@ -37,6 +37,7 @@ from advisory import (
     clear_advisory_items,
     format_backlog_for_forge,
 )
+from config import load_config
 from platforms import get_platform_adapter
 from platforms.base import PlatformAdapter
 from reporter import write_job_summary, update_progress_md
@@ -208,8 +209,15 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
                 commit_artifact(sentinel_file, f"Day {day}: SENTINEL report — ADVISORY attempt {attempt}")
                 continue
             else:
-                add_advisory_items(day, sentinel_report.get("advisories", []), "SENTINEL")
-                print(f"[PACE] Day {day}: SENTINEL ADVISORY backlocked — continuing to CONDUIT.")
+                new_advisories = sentinel_report.get("advisories", [])
+                add_advisory_items(day, new_advisories, "SENTINEL")
+                print(f"[PACE] Day {day}: SENTINEL ADVISORY backlisted — continuing to CONDUIT.")
+                cfg = load_config()
+                if cfg.advisory_push_to_issues and new_advisories:
+                    from advisory import load_open_backlog as _lob
+                    all_items = _lob()
+                    new_items = [i for i in all_items if i.get("day_raised") == day and i.get("agent") == "SENTINEL"]
+                    platform.push_advisory_items(day, new_items, "SENTINEL")
 
         if sentinel_decision == "SHIP" and is_clearance_day and sentinel_backlog:
             clear_advisory_items("SENTINEL")
@@ -250,8 +258,15 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
                 commit_artifact(conduit_file, f"Day {day}: CONDUIT report — ADVISORY attempt {attempt}")
                 continue
             else:
-                add_advisory_items(day, conduit_report.get("advisories", []), "CONDUIT")
-                print(f"[PACE] Day {day}: CONDUIT ADVISORY backlocked — proceeding to SHIP.")
+                new_advisories = conduit_report.get("advisories", [])
+                add_advisory_items(day, new_advisories, "CONDUIT")
+                print(f"[PACE] Day {day}: CONDUIT ADVISORY backlisted — proceeding to SHIP.")
+                cfg = load_config()
+                if cfg.advisory_push_to_issues and new_advisories:
+                    from advisory import load_open_backlog as _lob
+                    all_items = _lob()
+                    new_items = [i for i in all_items if i.get("day_raised") == day and i.get("agent") == "CONDUIT"]
+                    platform.push_advisory_items(day, new_items, "CONDUIT")
 
         if conduit_decision == "SHIP" and is_clearance_day and conduit_backlog:
             clear_advisory_items("CONDUIT")

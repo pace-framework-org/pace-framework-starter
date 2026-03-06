@@ -10,6 +10,7 @@ Supported platforms:
     bitbucket — Bitbucket Cloud:  BITBUCKET_USER + BITBUCKET_APP_PASSWORD
                                   + BITBUCKET_WORKSPACE + BITBUCKET_REPO_SLUG
     jenkins   — Jenkins:          JENKINS_URL + JENKINS_USER + JENKINS_TOKEN + JENKINS_JOB_NAME
+    jira      — Jira Cloud:       JIRA_URL + JIRA_EMAIL + JIRA_TOKEN + JIRA_PROJECT_KEY
     local     — No platform:      no credentials required
 """
 
@@ -33,7 +34,7 @@ def get_platform_adapter() -> PlatformAdapter:
     """
     from config import load_config
     cfg = load_config()
-    platform_type = cfg.platform_type  # "github" | "gitlab" | "bitbucket" | "jenkins" | "local"
+    platform_type = cfg.platform_type  # "github" | "gitlab" | "bitbucket" | "jenkins" | "jira" | "local"
 
     if platform_type == "github":
         from platforms.github import GitHubAdapter
@@ -66,6 +67,15 @@ def get_platform_adapter() -> PlatformAdapter:
             user=os.environ.get("JENKINS_USER", ""),
             token=os.environ.get("JENKINS_TOKEN", ""),
             job_name=os.environ.get("JENKINS_JOB_NAME", ""),
+        )
+
+    if platform_type == "jira":
+        from platforms.jira import JiraAdapter
+        return JiraAdapter(
+            url=os.environ.get("JIRA_URL", ""),
+            email=os.environ.get("JIRA_EMAIL", ""),
+            token=os.environ.get("JIRA_TOKEN", ""),
+            project_key=os.environ.get("JIRA_PROJECT_KEY", ""),
         )
 
     # "local" or any unrecognised value — safe no-op adapter

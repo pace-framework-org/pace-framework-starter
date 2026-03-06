@@ -48,8 +48,9 @@ class PaceConfig:
     source_dirs: list[SourceDir]
     docs_dir: Path | None       # Absolute path to external docs folder, or None
     tech: TechConfig
-    platform_type: str          # "github" | "gitlab" | "bitbucket" | "jenkins" | "local"
+    platform_type: str          # "github" | "gitlab" | "bitbucket" | "jenkins" | "jira" | "local"
     llm: LLMConfig
+    advisory_push_to_issues: bool  # Whether to open issues for backlisted advisory findings
 
     def source_dirs_table(self) -> str:
         """Return a formatted table of source directories for use in agent system prompts."""
@@ -101,6 +102,7 @@ def load_config() -> PaceConfig:
     )
 
     platform_raw = raw.get("platform", {})
+    advisory_raw = raw.get("advisory", {})
     llm_raw = raw.get("llm", {})
 
     llm = LLMConfig(
@@ -119,4 +121,5 @@ def load_config() -> PaceConfig:
         tech=tech,
         platform_type=platform_raw.get("type", "github"),
         llm=llm,
+        advisory_push_to_issues=bool(advisory_raw.get("push_to_issues", False)),
     )

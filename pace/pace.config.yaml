@@ -65,7 +65,7 @@ tech:
 # Platform — CI/CD and Git hosting integration
 # ---------------------------------------------------------------------------
 platform:
-  # Supported values: github | gitlab | bitbucket | jenkins | local
+  # Supported values: github | gitlab | bitbucket | jenkins | jira | local
   #
   #   github    — GitHub Actions CI + GitHub API (PRs, Issues)
   #               Env vars: GITHUB_TOKEN, GITHUB_REPOSITORY
@@ -81,9 +81,26 @@ platform:
   #   jenkins   — Jenkins REST API for CI polling; PR/issue written to local files
   #               Env vars: JENKINS_URL, JENKINS_USER, JENKINS_TOKEN, JENKINS_JOB_NAME
   #
+  #   jira      — Jira Cloud for escalation tickets and advisory issues.
+  #               CI polling and PR/MR creation are not supported — use alongside
+  #               jenkins or github for code hosting / CI.
+  #               Env vars: JIRA_URL, JIRA_EMAIL, JIRA_TOKEN, JIRA_PROJECT_KEY
+  #               JIRA_URL example: https://mycompany.atlassian.net
+  #               JIRA_TOKEN: create at id.atlassian.com → Security → API tokens
+  #
   #   local     — No platform; CI skipped; PR/issue artifacts written to .pace/
   #               No env vars required
   type: github
+
+# ---------------------------------------------------------------------------
+# Advisory backlog — controls how non-blocking findings are surfaced
+# ---------------------------------------------------------------------------
+advisory:
+  # When true, PACE opens a platform issue/ticket each time advisory findings
+  # are added to the backlog (after a retry was given but the issue persists).
+  # Requires a platform that supports issue creation (github, gitlab, bitbucket, jira).
+  # Set false (default) to keep advisories in .pace/advisory_backlog.yaml only.
+  push_to_issues: false
 
 # ---------------------------------------------------------------------------
 # LLM — AI provider and model for all PACE agents

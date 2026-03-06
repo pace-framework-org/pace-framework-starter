@@ -84,3 +84,21 @@ class PlatformAdapter(ABC):
         For Jenkins: writes to a workspace file (jenkins-summary.md).
         For Local:  writes to pace-summary.md in the repo root.
         """
+
+    @abstractmethod
+    def push_advisory_items(self, day: int, items: list[dict], agent: str) -> str:
+        """Open an issue/ticket for newly backlisted advisory findings.
+
+        Called when advisory findings are added to the backlog after a retry
+        was given but the issue was not resolved. Only called when
+        advisory.push_to_issues is true in pace.config.yaml.
+
+        Args:
+            day:   PACE day number the advisory was raised.
+            items: List of advisory item dicts (keys: id, day_raised, agent,
+                   finding, status) — only the newly added items for this call.
+            agent: "SENTINEL" or "CONDUIT" — the reporting agent.
+
+        Returns:
+            URL of the opened issue/ticket, or empty string if unsupported / failed.
+        """
