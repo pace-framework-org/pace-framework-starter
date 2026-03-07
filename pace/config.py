@@ -4,6 +4,8 @@ Reads pace.config.yaml and exposes a PaceConfig dataclass used by all agents.
 Call load_config() once per agent invocation — it is fast (cached after first call).
 """
 
+PACE_VERSION = "1.0.0"
+
 from __future__ import annotations
 
 import yaml
@@ -50,7 +52,7 @@ class PaceConfig:
     tech: TechConfig
     platform_type: str          # "github" | "gitlab" | "bitbucket" | "jenkins" | "jira" | "local"
     llm: LLMConfig
-    advisory_push_to_issues: bool  # Whether to open issues for backlisted advisory findings
+    advisory_push_to_issues: bool  # Whether to open issues for backlogged advisory findings
 
     def source_dirs_table(self) -> str:
         """Return a formatted table of source directories for use in agent system prompts."""

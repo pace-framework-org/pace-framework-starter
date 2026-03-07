@@ -2,6 +2,8 @@
 
 ![PACE Framework](https://raw.githubusercontent.com/pace-framework-org/pace-docs/main/src/assets/pace-logo-square.svg)
 
+![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Python](https://img.shields.io/badge/python-3.12+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+
 **PACE** (Plan, Architect, Code, Evaluate) is an AI-native daily delivery framework that runs a structured pipeline of Claude-powered agents to implement, validate, and review software — one story per day, every day.
 
 ---
@@ -22,7 +24,7 @@ Each agent can return **SHIP**, **HOLD**, or (for SENTINEL/CONDUIT) **ADVISORY**
 
 - **SHIP** — passes; next agent runs
 - **HOLD** — blocks; FORGE gets up to 2 retries before escalation
-- **ADVISORY** — non-blocking concern; FORGE gets one retry; if still advisory, backlocked
+- **ADVISORY** — non-blocking concern; FORGE gets one retry; if still advisory, backlogged
 
 ### Advisory Backlog
 
@@ -317,7 +319,7 @@ pace-framework-starter/
 PRIME → FORGE → GATE → SENTINEL → CONDUIT
                   |         |           |
                 HOLD      HOLD        HOLD    → retry FORGE (up to 2 retries)
-                        ADVISORY    ADVISORY  → retry FORGE once; then backlock
+                        ADVISORY    ADVISORY  → retry FORGE once; then backlog
                  SHIP      SHIP        SHIP   → commit artifacts, update PROGRESS.md
 ```
 
