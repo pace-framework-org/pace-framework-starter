@@ -118,6 +118,29 @@ TOOLS = [
         },
     },
     {
+        "name": "confirm_red_phase",
+        "description": (
+            "REQUIRED TDD checkpoint. Call this after running the test suite and confirming "
+            "that at least one new test fails. Provide the failing test output as evidence. "
+            "You must call this before writing any implementation code."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "failing_tests": {
+                    "type": "string",
+                    "description": "The test runner output showing at least one failing test.",
+                },
+                "tests_written": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of test file paths written in Phase 1.",
+                },
+            },
+            "required": ["failing_tests", "tests_written"],
+        },
+    },
+    {
         "name": "complete_handoff",
         "description": "Signal implementation complete. Call this as your final action.",
         "input_schema": {
@@ -147,6 +170,18 @@ def _dispatch_tool(name: str, inputs: dict) -> str:
     if name == "git_commit":
         return _tool_git_commit(inputs["message"])
     return f"ERROR: Unknown tool: {name}"
+
+
+def _tool_confirm_red_phase(failing_tests: str, tests_written: list[str]) -> str:
+    if not failing_tests or not failing_tests.strip():
+        return "ERROR: confirm_red_phase requires non-empty failing_tests output. Run the test suite first and provide the output."
+    if not tests_written:
+        return "ERROR: confirm_red_phase requires at least one test file path in tests_written."
+    summary = ", ".join(tests_written)
+    return (
+        f"Red phase confirmed. Tests written: {summary}. "
+        "You may now proceed to Phase 2: write the minimum implementation to make these tests pass."
+    )
 
 
 def _load_context(doc: str) -> str:
@@ -181,16 +216,36 @@ Tech stack: {cfg.tech.primary_language}{f', {cfg.tech.secondary_language}' if cf
 {test_cmd_note}
 
 Your job is to implement the Story Card exactly as specified. No more, no less.
-Write the minimum code that makes the acceptance criteria pass.
+Follow strict Test-Driven Development. You MUST complete every phase in order:
+
+PHASE 1 — RED (write failing tests)
+  a. Read existing source files to understand structure and conventions.
+  b. Write ONLY test files that assert the acceptance criteria. No implementation yet.
+  c. Run the test suite with run_bash. Confirm at least one new test fails.
+  d. Call confirm_red_phase with the failing test output as evidence.
+     You CANNOT proceed to Phase 2 without calling confirm_red_phase.
+
+PHASE 2 — GREEN (write minimum implementation)
+  a. Write the minimum production code to make the failing tests pass.
+  b. Run the test suite. If tests still fail, fix only what is needed — do not rewrite tests.
+  c. All acceptance criteria tests must pass before continuing.
+
+PHASE 3 — REFACTOR (clean up)
+  a. Remove duplication or dead code introduced during Green. Tests must remain green.
+  b. Run the test suite one final time to confirm.
+
+PHASE 4 — COMMIT & HANDOFF
+  a. Run git_commit with a message that names the story.
+  b. Run git rev-parse HEAD to get the SHA.
+  c. Call complete_handoff as your final action.
 
 Rules:
 - Do not add features, abstractions, or error handling for scenarios outside the story.
-- Write tests alongside implementation — acceptance criteria must be verified by automated tests.
+- Never modify a test to make it pass — fix the implementation instead.
 - Keep commits focused: one logical change per commit.
 - Do not modify files outside the source directories listed above.
 
-You have access to tools: read_file, write_file, run_bash, git_commit, complete_handoff.
-Use complete_handoff as your final action when implementation and commit are done."""
+You have access to tools: read_file, write_file, run_bash, git_commit, confirm_red_phase, complete_handoff."""
 
     story_yaml = yaml.dump(story_card, default_flow_style=False, allow_unicode=True)
     engineering_ctx = _load_context("engineering.md")
@@ -204,6 +259,7 @@ Use complete_handoff as your final action when implementation and commit are don
     messages = [{"role": "user", "content": user_content}]
 
     handoff_data: dict | None = None
+    red_phase_confirmed: bool = False
     max_iterations = 40
 
     for iteration in range(max_iterations):
@@ -221,10 +277,44 @@ Use complete_handoff as your final action when implementation and commit are don
 
         tool_results = []
         for call in response.tool_calls:
+            if call.name == "confirm_red_phase":
+                result = _tool_confirm_red_phase(
+                    call.input.get("failing_tests", ""),
+                    call.input.get("tests_written", []),
+                )
+                if result.startswith("ERROR:"):
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": call.id,
+                        "content": result,
+                    })
+                else:
+                    red_phase_confirmed = True
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": call.id,
+                        "content": result,
+                    })
+                continue
+
             if call.name == "complete_handoff":
+                if not red_phase_confirmed:
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": call.id,
+                        "content": (
+                            "ERROR: TDD violation — confirm_red_phase was never called. "
+                            "You must write tests first, run them to confirm failure, "
+                            "and call confirm_red_phase before completing the handoff. "
+                            "Go back to Phase 1."
+                        ),
+                    })
+                    continue
+
                 handoff_data = dict(call.input)
                 handoff_data["day"] = day
                 handoff_data["agent"] = "FORGE"
+                handoff_data["tdd_red_phase_confirmed"] = True
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": call.id,

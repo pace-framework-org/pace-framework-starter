@@ -92,6 +92,13 @@ Rules:
     engineering_ctx = _load_context("engineering.md")
     engineering_section = f"\nEngineering Context (module map and conventions):\n{engineering_ctx}\n" if engineering_ctx else ""
 
+    tdd_confirmed = handoff.get("tdd_red_phase_confirmed", False)
+    tdd_section = (
+        "TDD Red Phase: confirmed (FORGE called confirm_red_phase before writing implementation)\n"
+        if tdd_confirmed
+        else "TDD Red Phase: NOT confirmed — FORGE did not call confirm_red_phase\n"
+    )
+
     if ci_result:
         ci_section = f"""CI Run Result:
 - Conclusion: {ci_result.get('conclusion', 'unknown')}
@@ -108,6 +115,7 @@ Rules:
 FORGE Handoff Note:
 {handoff_yaml}
 {engineering_section}
+{tdd_section}
 {ci_section}
 Test runner output ({cfg.tech.test_command}):
 ```
