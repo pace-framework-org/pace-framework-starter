@@ -1,5 +1,7 @@
 # PACE Framework
 
+![PACE Framework](https://raw.githubusercontent.com/pace-framework-org/pace-docs/main/src/assets/pace-logo-square.svg)
+
 **PACE** (Plan, Architect, Code, Evaluate) is an AI-native daily delivery framework that runs a structured pipeline of Claude-powered agents to implement, validate, and review software — one story per day, every day.
 
 ---
