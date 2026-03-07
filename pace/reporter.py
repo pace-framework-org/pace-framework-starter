@@ -161,7 +161,7 @@ def write_job_summary(
                 lines.append(f"  - *Evidence:* {finding.get('evidence', '')}")
             lines.append("")
             if report.get("advisories"):
-                lines += ["**Advisories (backlocked):**", ""]
+                lines += ["**Advisories (backlogged):**", ""]
                 for a in report["advisories"]:
                     lines.append(f"- ⚠️ {a}")
                 lines.append("")

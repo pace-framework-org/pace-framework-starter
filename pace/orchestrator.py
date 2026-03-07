@@ -211,7 +211,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
             else:
                 new_advisories = sentinel_report.get("advisories", [])
                 add_advisory_items(day, new_advisories, "SENTINEL")
-                print(f"[PACE] Day {day}: SENTINEL ADVISORY backlisted — continuing to CONDUIT.")
+                print(f"[PACE] Day {day}: SENTINEL ADVISORY backlogged — continuing to CONDUIT.")
                 cfg = load_config()
                 if cfg.advisory_push_to_issues and new_advisories:
                     from advisory import load_open_backlog as _lob
@@ -260,7 +260,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
             else:
                 new_advisories = conduit_report.get("advisories", [])
                 add_advisory_items(day, new_advisories, "CONDUIT")
-                print(f"[PACE] Day {day}: CONDUIT ADVISORY backlisted — proceeding to SHIP.")
+                print(f"[PACE] Day {day}: CONDUIT ADVISORY backlogged — proceeding to SHIP.")
                 cfg = load_config()
                 if cfg.advisory_push_to_issues and new_advisories:
                     from advisory import load_open_backlog as _lob
