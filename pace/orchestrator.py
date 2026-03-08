@@ -410,6 +410,31 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
     return False
 
 
+def _run_day_zero(plan: dict) -> None:
+    """Day 0 planning phase — estimate sprint cost and pre-populate PROGRESS.md."""
+    from planner import run_planner
+
+    cfg = load_config()
+    print("[PACE] === Day 0 — Sprint Planning & Cost Estimation ===")
+
+    _plan_cost_before = spend_tracker.total_usd()
+    report = run_planner(plan, cfg.llm.analysis_model)
+    planning_cost = round(spend_tracker.total_usd() - _plan_cost_before, 4)
+
+    # Write final planning cost back to the report
+    planner_file = PACE_DIR / "day-0" / "planner.md"
+    report["planning_cost_usd"] = planning_cost
+    planner_file.write_text(yaml.dump(report, default_flow_style=False, allow_unicode=True))
+    commit_artifact(planner_file, "Day 0: Sprint plan with cost estimates")
+
+    print(f"[PACE] Day 0 planning cost: ${planning_cost:.4f}")
+
+    update_progress_md(0)
+    commit_artifact(PROGRESS_FILE, "Day 0: PROGRESS.md — sprint plan initialized")
+
+    print(f"[PACE] === Day 0 complete — Sprint plan ready, Day 1 begins next run ===")
+
+
 def main() -> None:
     # Register spend flush on exit — covers all sys.exit() paths.
     def _flush_spend() -> None:
@@ -426,6 +451,11 @@ def main() -> None:
 
     day = get_current_day()
     plan = load_plan()
+
+    # Day 0 is the planning phase — run cost estimation for all sprint days.
+    if day == 0:
+        _run_day_zero(plan)
+        sys.exit(0)
 
     try:
         day_plan = get_day_plan(plan, day)

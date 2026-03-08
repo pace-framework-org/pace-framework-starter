@@ -16,12 +16,38 @@ PACE_DIR = REPO_ROOT / ".pace"
 PROGRESS_FILE = REPO_ROOT / "PROGRESS.md"
 PLAN_FILE = Path(__file__).parent / "plan.yaml"
 
-RESULT_ICON = {"SHIP": "✅", "HOLD": "🔴", "ABORT": "⚠️", "PENDING": "⏳"}
+RESULT_ICON = {"SHIP": "✅", "HOLD": "🔴", "ABORT": "⚠️", "PENDING": "⏳", "PLAN": "📋"}
 
 
 def _load_plan() -> dict:
     with open(PLAN_FILE) as f:
         return yaml.safe_load(f)
+
+
+def _load_planner_report() -> dict | None:
+    """Load the Day 0 planner report from .pace/day-0/planner.md, or None if absent."""
+    planner_file = PACE_DIR / "day-0" / "planner.md"
+    if not planner_file.exists():
+        return None
+    return yaml.safe_load(planner_file.read_text()) or None
+
+
+def _load_plan_estimates() -> dict[int, dict]:
+    """Return {day: estimate_dict} from the Day 0 planner report."""
+    report = _load_planner_report()
+    if not report:
+        return {}
+    return {e["day"]: e for e in report.get("estimates", [])}
+
+
+def _load_forge_cost(day: int) -> float | None:
+    """Return forge_cost_usd from a day's handoff.md, or None if not available."""
+    handoff_file = PACE_DIR / f"day-{day}" / "handoff.md"
+    if not handoff_file.exists():
+        return None
+    data = yaml.safe_load(handoff_file.read_text()) or {}
+    cost = data.get("forge_cost_usd")
+    return float(cost) if cost is not None else None
 
 
 def _load_day_artifacts(day: int) -> tuple[dict | None, dict | None, dict | None]:
@@ -216,6 +242,10 @@ def update_progress_md(current_day: int) -> None:
     now = datetime.now(tz).strftime("%Y-%m-%d %H:%M %Z")
     total_days = cfg.sprint_duration_days
 
+    planner_report = _load_planner_report()
+    estimates = _load_plan_estimates()
+    has_costs = bool(planner_report)
+
     rows = []
     shipped_count = 0
     deferred_total = 0
@@ -225,12 +255,15 @@ def update_progress_md(current_day: int) -> None:
         day_plan = plan_by_day.get(day, {})
         story, handoff, gate = _load_day_artifacts(day)
 
+        est_cost = estimates.get(day, {}).get("predicted_cost_usd")
+        actual_cost = _load_forge_cost(day)
+
         if gate is None and day > current_day:
-            rows.append((day, "", day_plan.get("target", "")[:60], "PENDING", ""))
+            rows.append((day, day_plan.get("target", "")[:60], "PENDING", "", est_cost, None))
             continue
 
         if gate is None and day <= current_day:
-            rows.append((day, "", day_plan.get("target", "")[:60], "IN PROGRESS", ""))
+            rows.append((day, day_plan.get("target", "")[:60], "IN PROGRESS", "", est_cost, actual_cost))
             continue
 
         decision = gate.get("gate_decision", "?")
@@ -245,7 +278,7 @@ def update_progress_md(current_day: int) -> None:
             shipped_count += 1
 
         notes = "; ".join(deferred) if deferred else ""
-        rows.append((day, now if day == current_day else "", day_plan.get("target", "")[:60], decision, notes[:80]))
+        rows.append((day, day_plan.get("target", "")[:60], decision, notes[:80], est_cost, actual_cost))
 
     ship_rate = f"{(shipped_count / current_day * 100):.0f}%" if current_day > 0 else "0%"
     open_advisories = len(load_open_backlog())
@@ -269,13 +302,31 @@ def update_progress_md(current_day: int) -> None:
         "",
         "## Day Log",
         "",
-        "| Day | Story | Decision | Notes |",
-        "| --- | --- | --- | --- |",
     ]
 
-    for day, _, target, decision, notes in rows:
+    if has_costs:
+        lines += [
+            "| Day | Story | Decision | Est. Cost | Actual Cost | Notes |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+        # Day 0 planning row
+        planning_cost = planner_report.get("planning_cost_usd", 0.0)
+        planning_cost_str = f"${planning_cost:.4f}" if planning_cost else "—"
+        lines.append(f"| 0 | Sprint planning | 📋 PLAN | — | {planning_cost_str} | Cost estimation |")
+    else:
+        lines += [
+            "| Day | Story | Decision | Notes |",
+            "| --- | --- | --- | --- |",
+        ]
+
+    for day, target, decision, notes, est_cost, actual_cost in rows:
         icon = RESULT_ICON.get(decision, "⏳")
-        lines.append(f"| {day} | {target} | {icon} {decision} | {notes} |")
+        if has_costs:
+            est_str = f"${est_cost:.2f}" if est_cost is not None else "—"
+            actual_str = f"${actual_cost:.2f}" if actual_cost is not None else "—"
+            lines.append(f"| {day} | {target} | {icon} {decision} | {est_str} | {actual_str} | {notes} |")
+        else:
+            lines.append(f"| {day} | {target} | {icon} {decision} | {notes} |")
 
     lines += [
         "",
@@ -291,17 +342,38 @@ def update_progress_md(current_day: int) -> None:
         week_days = [r for r in rows if plan_by_day.get(r[0], {}).get("week") == week]
         if not week_days:
             continue
-        week_shipped = sum(1 for r in week_days if r[3] == "SHIP")
-        week_total = len([r for r in week_days if r[3] not in ("PENDING",)])
+        week_shipped = sum(1 for r in week_days if r[2] == "SHIP")
+        week_total = len([r for r in week_days if r[2] not in ("PENDING",)])
         week_label = plan_by_day.get(week_days[0][0], {}).get("week_label", f"Week {week}")
         lines.append(f"### Week {week}" + (f" — {week_label}" if week_label != f"Week {week}" else ""))
         lines.append("")
         if week_total > 0:
             lines.append(f"**{week_shipped}/{week_total} days shipped**")
             lines.append("")
-        for day, _, target, decision, notes in week_days:
+        for day, target, decision, notes, est_cost, actual_cost in week_days:
             icon = RESULT_ICON.get(decision, "⏳")
             lines.append(f"- Day {day}: {icon} {target}")
         lines.append("")
+
+    if has_costs:
+        total_estimated = planner_report.get("total_estimated_usd", 0.0)
+        planning_cost = planner_report.get("planning_cost_usd", 0.0)
+        total_actual = sum(_load_forge_cost(d) or 0.0 for d in range(1, total_days + 1))
+        variance = total_actual - total_estimated
+        variance_str = (f"+${variance:.2f}" if variance >= 0 else f"-${abs(variance):.2f}")
+        variance_pct = f" ({variance / total_estimated * 100:+.0f}%)" if total_estimated > 0 else ""
+        lines += [
+            "---",
+            "",
+            "## Cost Summary",
+            "",
+            "| Metric | Value |",
+            "| --- | --- |",
+            f"| Total estimated (Days 1–{total_days}) | ${total_estimated:.2f} |",
+            f"| Total actual (FORGE runs) | ${total_actual:.2f} |",
+            f"| Variance | {variance_str}{variance_pct} |",
+            f"| Day 0 planning cost | ${planning_cost:.4f} |",
+            "",
+        ]
 
     PROGRESS_FILE.write_text("\n".join(lines))
