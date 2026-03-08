@@ -2,7 +2,7 @@
 
 ![PACE Framework](https://raw.githubusercontent.com/pace-framework-org/pace-docs/main/src/assets/pace-logo-square.svg)
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Python](https://img.shields.io/badge/python-3.12+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Python](https://img.shields.io/badge/python-3.12+-blue) ![License](https://img.shields.io/badge/license-Apache%202.0-green)
 
 **PACE** (Plan, Architect, Code, Evaluate) is an AI-native daily delivery framework that runs a structured pipeline of Claude-powered agents to implement, validate, and review software — one story per day, every day.
 

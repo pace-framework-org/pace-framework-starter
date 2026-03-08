@@ -38,17 +38,17 @@ Copy `pace/pace.config.yaml` and fill in your project details before running.
 
 `main` enforces verified signatures. The easiest approach is SSH signing — no GPG needed.
 
-**1. Generate a signing key**
+### 1. Generate a signing key
 
 ```bash
 ssh-keygen -t ed25519 -C "you@example.com" -f ~/.ssh/github_signing -N ""
 ```
 
-**2. Add it to GitHub as a Signing Key**
+### 2. Add it to GitHub as a Signing Key
 
 Go to **github.com → Settings → SSH and GPG keys → New SSH key**, set the type to **Signing Key**, and paste the contents of `~/.ssh/github_signing.pub`.
 
-**3. Configure git**
+### 3. Configure git
 
 ```bash
 git config --global gpg.format ssh
@@ -83,6 +83,7 @@ All PRs must pass CI before review.
 ## Reporting issues
 
 Use [GitHub Issues](https://github.com/pace-framework-org/pace-framework-starter/issues). Include:
+
 - PACE version (`framework_version` in `pace.config.yaml`)
 - Python version
 - Platform type (`platform.type`)
@@ -101,4 +102,4 @@ Look for issues tagged [`good first issue`](https://github.com/pace-framework-or
 
 ## License
 
-By contributing you agree that your contributions will be licensed under the [MIT License](LICENSE).
+By contributing you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
