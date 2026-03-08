@@ -38,7 +38,11 @@ See https://docs.litellm.ai/docs/providers for the full provider list.
 from __future__ import annotations
 
 import json
+import sys
 import uuid
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     import litellm
@@ -46,6 +50,7 @@ try:
 except ImportError:
     _LITELLM_AVAILABLE = False
 
+import spend_tracker
 from llm.base import ChatResponse, LLMAdapter, ToolCall
 
 
@@ -80,6 +85,12 @@ class LiteLLMAdapter(LLMAdapter):
             max_tokens=max_tokens,
             **self._call_kwargs(),
         )
+        if hasattr(response, "usage") and response.usage:
+            spend_tracker.record(
+                self._model,
+                response.usage.prompt_tokens or 0,
+                response.usage.completion_tokens or 0,
+            )
         return response.choices[0].message.content or ""
 
     # ------------------------------------------------------------------
@@ -106,6 +117,12 @@ class LiteLLMAdapter(LLMAdapter):
             kwargs["tools"] = oai_tools
 
         response = litellm.completion(**kwargs)
+        if hasattr(response, "usage") and response.usage:
+            spend_tracker.record(
+                self._model,
+                response.usage.prompt_tokens or 0,
+                response.usage.completion_tokens or 0,
+            )
         return _openai_response_to_pace(response)
 
 

@@ -63,13 +63,48 @@ jobs:
       #   run: npm ci
       # ---------------------------------------------------------------------------
 
+      - name: Check daily budget
+        id: budget_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACE_DAILY_BUDGET: ${{ vars.PACE_DAILY_BUDGET }}
+          PACE_DAILY_SPEND: ${{ vars.PACE_DAILY_SPEND }}
+          PACE_DAILY_SPEND_DATE: ${{ vars.PACE_DAILY_SPEND_DATE }}
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          BUDGET="${PACE_DAILY_BUDGET:-0}"
+          SPEND="${PACE_DAILY_SPEND:-0}"
+
+          # Reset accumulated spend if it belongs to a previous day.
+          if [ "${PACE_DAILY_SPEND_DATE:-}" != "$TODAY" ]; then
+            SPEND="0"
+            gh variable set PACE_DAILY_SPEND      --body "0"      --repo ${{ github.repository }} || true
+            gh variable set PACE_DAILY_SPEND_DATE --body "$TODAY" --repo ${{ github.repository }} || true
+          fi
+
+          # PACE_SPEND_TODAY is read by the orchestrator to compute the running total.
+          echo "PACE_SPEND_TODAY=${SPEND}" >> $GITHUB_ENV
+
+          if [ "$BUDGET" = "0" ] || [ -z "$BUDGET" ]; then
+            echo "budget_exceeded=false" >> $GITHUB_OUTPUT
+            echo "[PACE] No daily budget configured — proceeding."
+          elif python3 -c "import sys; sys.exit(0 if float('${SPEND}') >= float('${BUDGET}') else 1)"; then
+            echo "budget_exceeded=true" >> $GITHUB_OUTPUT
+            echo "[PACE] Daily budget \$${BUDGET} reached (\$${SPEND} spent today). Skipping run."
+          else
+            echo "budget_exceeded=false" >> $GITHUB_OUTPUT
+            echo "[PACE] Budget OK — \$${SPEND} of \$${BUDGET} used today."
+          fi
+
       - name: Run PACE cycle
+        if: steps.budget_check.outputs.budget_exceeded != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PACE_DAY: ${{ inputs.day || vars.PACE_DAY }}
           PACE_PAUSED: ${{ vars.PACE_PAUSED || 'false' }}
+          PACE_SPEND_TODAY: ${{ env.PACE_SPEND_TODAY }}
         run: python pace/orchestrator.py
 
       - name: Write job summary

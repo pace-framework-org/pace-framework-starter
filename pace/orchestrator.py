@@ -8,6 +8,7 @@ Environment variables:
     PACE_DAY              Current day number (1-N, where N = sprint.duration_days in config)
     ANTHROPIC_API_KEY     Anthropic API key
     PACE_PAUSED           Set to "true" to skip execution (loop is paused)
+    PACE_SPEND_TODAY      Accumulated spend today before this run (set by pace.yml)
 
 Platform credentials (set the ones matching your platform.type in pace.config.yaml):
     GitHub:   GITHUB_TOKEN, GITHUB_REPOSITORY
@@ -16,6 +17,7 @@ Platform credentials (set the ones matching your platform.type in pace.config.ya
     Local:    (none required)
 """
 
+import atexit
 import os
 import shlex
 import sys
@@ -42,6 +44,7 @@ from config import load_config
 from platforms import get_platform_adapter
 from platforms.base import PlatformAdapter
 from reporter import write_job_summary, update_progress_md
+import spend_tracker
 
 REPO_ROOT = Path(__file__).parent.parent
 PACE_DIR = REPO_ROOT / ".pace"
@@ -53,6 +56,35 @@ MAX_RETRIES = 1
 class CycleAbortError(Exception):
     """Raised when a cycle cannot start due to an infrastructure failure (e.g. PRIME error).
     Unlike a HOLD, this does not trigger a platform escalation issue."""
+
+
+def _update_daily_spend(run_cost_usd: float) -> None:
+    """Accumulate this run's cost into PACE_DAILY_SPEND GitHub Variable.
+
+    PACE_SPEND_TODAY is injected by pace.yml's budget-check step and holds the
+    accumulated spend from earlier runs today (reset to 0 on a new calendar day).
+    Only writes the variable when GITHUB_REPOSITORY is set (i.e. running in CI).
+    """
+    from datetime import date
+    today = date.today().isoformat()
+    prior = float(os.environ.get("PACE_SPEND_TODAY", "0") or "0")
+    new_total = prior + run_cost_usd
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    if not repo:
+        return
+    token = os.environ.get("GITHUB_TOKEN", "")
+    env = {**os.environ, "GH_TOKEN": token}
+    subprocess.run(
+        ["gh", "variable", "set", "PACE_DAILY_SPEND",
+         "--body", f"{new_total:.4f}", "--repo", repo],
+        check=False, env=env, capture_output=True,
+    )
+    subprocess.run(
+        ["gh", "variable", "set", "PACE_DAILY_SPEND_DATE",
+         "--body", today, "--repo", repo],
+        check=False, env=env, capture_output=True,
+    )
+    print(f"[PACE] Daily spend updated: ${new_total:.4f} (this run: ${run_cost_usd:.4f})")
 
 
 def load_plan() -> dict:
@@ -291,6 +323,15 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
 
 
 def main() -> None:
+    # Register spend flush on exit — covers all sys.exit() paths.
+    def _flush_spend() -> None:
+        cost = spend_tracker.total_usd()
+        if cost > 0:
+            print(f"[PACE] API usage this run:\n{spend_tracker.summary()}")
+            _update_daily_spend(cost)
+
+    atexit.register(_flush_spend)
+
     if os.environ.get("PACE_PAUSED", "").lower() == "true":
         print("[PACE] Loop is paused (PACE_PAUSED=true). Resolve the open escalation issue to resume.")
         sys.exit(0)

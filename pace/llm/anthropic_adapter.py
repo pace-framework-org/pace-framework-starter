@@ -13,7 +13,13 @@ Model IDs (set in pace.config.yaml → llm.model):
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import anthropic
+import spend_tracker
 
 from llm.base import ChatResponse, LLMAdapter, ToolCall
 
@@ -34,6 +40,7 @@ class AnthropicAdapter(LLMAdapter):
             system=system,
             messages=[{"role": "user", "content": user}],
         )
+        spend_tracker.record(response.model, response.usage.input_tokens, response.usage.output_tokens)
         return response.content[0].text
 
     # ------------------------------------------------------------------
@@ -57,6 +64,7 @@ class AnthropicAdapter(LLMAdapter):
             kwargs["tools"] = tools
 
         response = self._client.messages.create(**kwargs)
+        spend_tracker.record(response.model, response.usage.input_tokens, response.usage.output_tokens)
 
         text: str | None = None
         tool_calls: list[ToolCall] = []
