@@ -103,6 +103,14 @@ advisory:
   push_to_issues: false
 
 # ---------------------------------------------------------------------------
+# Reporter — controls output formatting
+# ---------------------------------------------------------------------------
+reporter:
+  # IANA timezone for all timestamps in PROGRESS.md and job summaries.
+  # Examples: "UTC", "America/New_York", "Europe/London", "Asia/Tokyo"
+  timezone: "UTC"
+
+# ---------------------------------------------------------------------------
 # LLM — AI provider and model for all PACE agents
 # ---------------------------------------------------------------------------
 llm:

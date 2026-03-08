@@ -4,6 +4,7 @@ import os
 import sys
 import yaml
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -77,7 +78,8 @@ def write_job_summary(
 
     cfg = load_config()
     icon = RESULT_ICON.get(outcome, "❓")
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    tz = ZoneInfo(cfg.reporter_timezone)
+    now = datetime.now(tz).strftime("%Y-%m-%d %H:%M %Z")
     stats = _count_stats(day)
     total_days = cfg.sprint_duration_days
     ship_rate = f"{(stats['shipped'] / day * 100):.0f}%" if day > 0 else "N/A"
@@ -209,7 +211,8 @@ def update_progress_md(current_day: int) -> None:
     cfg = load_config()
     plan = _load_plan()
     plan_by_day = {d["day"]: d for d in plan["days"]}
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    tz = ZoneInfo(cfg.reporter_timezone)
+    now = datetime.now(tz).strftime("%Y-%m-%d %H:%M %Z")
     total_days = cfg.sprint_duration_days
 
     rows = []
