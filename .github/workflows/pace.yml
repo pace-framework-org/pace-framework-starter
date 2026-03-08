@@ -71,6 +71,14 @@ jobs:
           PACE_DAILY_SPEND: ${{ vars.PACE_DAILY_SPEND }}
           PACE_DAILY_SPEND_DATE: ${{ vars.PACE_DAILY_SPEND_DATE }}
         run: |
+          # Manual workflow_dispatch runs always proceed — budget cap only applies to scheduled runs.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "PACE_SPEND_TODAY=${PACE_DAILY_SPEND:-0}" >> $GITHUB_ENV
+            echo "budget_exceeded=false" >> $GITHUB_OUTPUT
+            echo "[PACE] Manual trigger — budget check bypassed."
+            exit 0
+          fi
+
           TODAY=$(date -u +%Y-%m-%d)
           BUDGET="${PACE_DAILY_BUDGET:-0}"
           SPEND="${PACE_DAILY_SPEND:-0}"
