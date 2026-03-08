@@ -153,6 +153,7 @@ def write_job_summary(
                 ]
 
         def _render_agent_report(report: dict, decision_key: str, label: str) -> None:
+            nonlocal lines
             decision = report.get(decision_key, "?")
             d_icon = "✅" if decision == "SHIP" else ("⚠️" if decision == "ADVISORY" else "❌")
             lines += [f"## {label} — {d_icon} {decision}", ""]
