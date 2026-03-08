@@ -260,8 +260,10 @@ You have access to tools: read_file, write_file, run_bash, git_commit, confirm_r
     messages = [{"role": "user", "content": user_content}]
 
     handoff_data: dict | None = None
-    red_phase_confirmed: bool = False
-    max_iterations = 25
+    # On retry attempts (hold_reason present), implementation is already committed.
+    # Skip the TDD red-phase gate so FORGE can verify and complete_handoff immediately.
+    red_phase_confirmed: bool = bool(hold_reason)
+    max_iterations = 35  # safety limit on the agentic loop
 
     for iteration in range(max_iterations):
         response = adapter.chat(

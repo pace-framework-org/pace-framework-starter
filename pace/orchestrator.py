@@ -28,7 +28,7 @@ from pathlib import Path
 # Add the pace directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agents.prime import run_prime
+from agents.prime import run_prime, run_prime_refine
 from agents.forge import run_forge
 from agents.gate import run_gate
 from agents.sentinel import run_sentinel
@@ -85,6 +85,39 @@ def _update_daily_spend(run_cost_usd: float) -> None:
         check=False, env=env, capture_output=True,
     )
     print(f"[PACE] Daily spend updated: ${new_total:.4f} (this run: ${run_cost_usd:.4f})")
+
+
+def _scope_check(story_card: dict, analysis_model: str) -> dict:
+    """Single Haiku call that predicts FORGE iteration count and cost.
+
+    Returns a dict with keys: predicted_iterations, predicted_cost_usd, reasoning.
+    Returns an empty dict on any failure — the check is non-fatal.
+    """
+    try:
+        from llm import get_llm_adapter
+        adapter = get_llm_adapter(model=analysis_model)
+        story_yaml = yaml.dump(story_card, default_flow_style=False, allow_unicode=True)
+        system = (
+            "You are a PACE cost estimator. Given a story card, predict how many agentic loop "
+            "iterations FORGE (a code-writing agent using claude-sonnet-4-6) will need and the "
+            "total Anthropic API cost in USD.\n"
+            "Typical ranges: simple (≤3 AC, 1-2 files) ≈ $0.30-0.80 | "
+            "medium (4-5 AC, 2-3 files) ≈ $0.80-1.50 | "
+            "complex (6+ AC, 3+ files or CLI commands) ≈ $1.50-3.50+\n"
+            "Respond ONLY with this YAML — no other text:\n"
+            "```yaml\n"
+            "predicted_iterations: <integer>\n"
+            "predicted_cost_usd: <float>\n"
+            "reasoning: \"<one concise sentence>\"\n"
+            "```"
+        )
+        import re
+        raw = adapter.complete(system, f"Story card:\n{story_yaml}", max_tokens=256).strip()
+        match = re.search(r"```(?:yaml)?\s*(.*?)```", raw, re.DOTALL)
+        return yaml.safe_load(match.group(1).strip() if match else raw) or {}
+    except Exception as exc:
+        print(f"[PACE] SCOPE check failed (non-fatal): {exc}")
+        return {}
 
 
 def load_plan() -> dict:
@@ -144,6 +177,59 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
     commit_artifact(story_file, f"Day {day}: PRIME story card")
     print(f"[PACE] Story card written.")
 
+    # Step 1b: SCOPE — refine story if AC count or predicted cost exceeds thresholds
+    cfg = load_config()
+    cc = cfg.cost_control
+    for _refine_round in range(2):  # max 2 refinement rounds
+        ac_count = len(story_card.get("acceptance", []))
+        needs_refine = False
+        refine_reason = ""
+
+        if cc.max_story_ac > 0 and ac_count > cc.max_story_ac:
+            refine_reason = f"Story has {ac_count} acceptance criteria (max {cc.max_story_ac})."
+            needs_refine = True
+
+        if not needs_refine and cc.max_story_cost_usd > 0:
+            scope = _scope_check(story_card, cfg.llm.analysis_model)
+            predicted = float(scope.get("predicted_cost_usd") or 0)
+            if predicted > cc.max_story_cost_usd:
+                refine_reason = (
+                    f"SCOPE predicts ${predicted:.2f} (max ${cc.max_story_cost_usd:.2f}). "
+                    f"{scope.get('reasoning', '')}"
+                )
+                needs_refine = True
+            if scope:
+                print(
+                    f"[PACE] SCOPE: ~{scope.get('predicted_iterations')} iterations, "
+                    f"~${predicted:.2f} predicted."
+                )
+
+        if not needs_refine:
+            break
+
+        print(f"[PACE] Day {day}: Refining story — {refine_reason}")
+        try:
+            story_card, deferred = run_prime_refine(day, story_card, refine_reason, cc.max_story_ac)
+        except Exception as exc:
+            print(f"[PACE] PRIME refinement failed (non-fatal, proceeding as-is): {exc}")
+            break
+
+        if deferred:
+            deferred_file = day_dir / "deferred_scope.yaml"
+            deferred_file.write_text(yaml.dump({"deferred": deferred}, allow_unicode=True))
+            commit_artifact(
+                deferred_file,
+                f"Day {day}: deferred scope — {len(deferred)} criteria deferred to next day",
+            )
+            print(f"[PACE] Day {day}: {len(deferred)} criteria deferred to next day.")
+
+        story_file.write_text(yaml.dump(story_card, default_flow_style=False, allow_unicode=True))
+        commit_artifact(
+            story_file,
+            f"Day {day}: PRIME story card (refined — {len(story_card.get('acceptance', []))} AC)",
+        )
+        print(f"[PACE] Day {day}: Story refined to {len(story_card.get('acceptance', []))} AC.")
+
     open_backlog = load_open_backlog() if is_clearance_day else []
     if is_clearance_day and open_backlog:
         print(f"[PACE] Day {day}: Clearance day — {len(open_backlog)} open advisory item(s) to resolve.")
@@ -163,6 +249,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
             )
 
         print(f"[PACE] Day {day}: Invoking FORGE (attempt {attempt}/{MAX_RETRIES + 1})...")
+        _forge_cost_before = spend_tracker.total_usd()
         try:
             handoff = run_forge(day, story_card, forge_hold)
         except Exception as exc:
@@ -172,6 +259,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
             hold_reason = str(exc)
             continue
 
+        handoff["forge_cost_usd"] = round(spend_tracker.total_usd() - _forge_cost_before, 4)
         handoff_file = day_dir / "handoff.md"
         handoff_file.write_text(yaml.dump(handoff, default_flow_style=False, allow_unicode=True))
         commit_artifact(handoff_file, f"Day {day}: FORGE handoff note (attempt {attempt})")

@@ -43,6 +43,12 @@ class LLMConfig:
 
 
 @dataclass
+class CostControlConfig:
+    max_story_ac: int = 5         # trigger PRIME refinement if AC count exceeds this (0 = disabled)
+    max_story_cost_usd: float = 0.0  # trigger PRIME refinement if SCOPE predicts more (0 = disabled)
+
+
+@dataclass
 class PaceConfig:
     product_name: str
     product_description: str
@@ -53,6 +59,7 @@ class PaceConfig:
     tech: TechConfig
     platform_type: str          # "github" | "gitlab" | "bitbucket" | "jenkins" | "jira" | "local"
     llm: LLMConfig
+    cost_control: CostControlConfig  # Proactive story scoping thresholds
     advisory_push_to_issues: bool  # Whether to open issues for backlogged advisory findings
     reporter_timezone: str = "UTC"  # IANA timezone for timestamps (e.g. "America/New_York")
 
@@ -109,6 +116,7 @@ def load_config() -> PaceConfig:
     advisory_raw = raw.get("advisory", {})
     reporter_raw = raw.get("reporter", {})
     llm_raw = raw.get("llm", {})
+    cc_raw = raw.get("cost_control", {})
 
     forge_model = llm_raw.get("model", "claude-sonnet-4-6")
     llm = LLMConfig(
@@ -116,6 +124,11 @@ def load_config() -> PaceConfig:
         model=forge_model,
         analysis_model=llm_raw.get("analysis_model", forge_model),
         base_url=llm_raw.get("base_url"),
+    )
+
+    cost_control = CostControlConfig(
+        max_story_ac=int(cc_raw.get("max_story_ac", 5)),
+        max_story_cost_usd=float(cc_raw.get("max_story_cost_usd", 0.0)),
     )
 
     return PaceConfig(
@@ -128,6 +141,7 @@ def load_config() -> PaceConfig:
         tech=tech,
         platform_type=platform_raw.get("type", "github"),
         llm=llm,
+        cost_control=cost_control,
         advisory_push_to_issues=bool(advisory_raw.get("push_to_issues", False)),
         reporter_timezone=reporter_raw.get("timezone", "UTC"),
     )

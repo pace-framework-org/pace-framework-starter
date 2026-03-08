@@ -146,3 +146,21 @@ llm:
 
   # base_url: null   # Optional endpoint override (e.g. for self-hosted Ollama)
   # base_url: "http://localhost:11434"
+
+# ---------------------------------------------------------------------------
+# Cost control — proactive story scoping before FORGE runs
+# ---------------------------------------------------------------------------
+# When a story exceeds either threshold, PRIME is re-invoked to split it:
+# today's story carries the highest-value AC (up to max_story_ac), and the
+# remainder is written to .pace/day-N/deferred_scope.yaml so the next day's
+# PRIME automatically incorporates them into the following story.
+# Up to 2 refinement rounds are attempted before proceeding as-is.
+cost_control:
+  # Maximum acceptance criteria per story. PRIME refinement is triggered if
+  # the generated story card exceeds this count. Set to 0 to disable.
+  max_story_ac: 5
+
+  # Maximum predicted FORGE cost in USD. A lightweight Haiku pre-check (SCOPE)
+  # estimates the cost before FORGE runs. If the estimate exceeds this value,
+  # PRIME refinement is triggered. Set to 0 to disable the cost pre-check.
+  max_story_cost_usd: 1.50
