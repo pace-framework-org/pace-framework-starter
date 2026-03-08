@@ -15,14 +15,16 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 def _scan_for_secrets(repo_root: Path) -> str:
     """Grep source files for common secret patterns."""
     result = subprocess.run(
-        (
-            r'grep -rn --include="*.go" --include="*.py" --include="*.ts" --include="*.js" '
-            r'--include="*.yaml" --include="*.yml" --include="*.json" '
-            r'--exclude-dir=".git" --exclude-dir=".venv" --exclude-dir="vendor" '
-            r'--exclude-dir="node_modules" --exclude-dir="__pycache__" '
-            r'-iE "(password|secret|token|api_key|apikey)\s*[=:]\s*[\"'"'"'][^\"'"'"']{8,}" . 2>&1 | head -50'
-        ),
-        shell=True,
+        [
+            "grep", "-rn",
+            "--include=*.go", "--include=*.py", "--include=*.ts", "--include=*.js",
+            "--include=*.yaml", "--include=*.yml", "--include=*.json",
+            "--exclude-dir=.git", "--exclude-dir=.venv", "--exclude-dir=vendor",
+            "--exclude-dir=node_modules", "--exclude-dir=__pycache__",
+            "-iE", r'(password|secret|token|api_key|apikey)\s*[=:]\s*["\']{1}[^"\']{8,}',
+            ".",
+        ],
+        shell=False,
         capture_output=True,
         text=True,
         cwd=str(repo_root),

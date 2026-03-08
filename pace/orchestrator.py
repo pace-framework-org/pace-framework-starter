@@ -17,6 +17,7 @@ Platform credentials (set the ones matching your platform.type in pace.config.ya
 """
 
 import os
+import shlex
 import sys
 import yaml
 import subprocess
@@ -85,7 +86,7 @@ def get_recent_gate_reports(day: int, count: int = 3) -> list[str]:
 
 def commit_artifact(path: Path, message: str) -> None:
     subprocess.run(
-        f'git add "{path}" && git commit -m "{message}" --allow-empty && git push origin HEAD',
+        f'git add {shlex.quote(str(path))} && git commit -m {shlex.quote(message)} --allow-empty && git push origin HEAD',
         shell=True,
         cwd=str(REPO_ROOT),
         check=False,

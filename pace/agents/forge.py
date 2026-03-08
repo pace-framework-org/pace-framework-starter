@@ -1,6 +1,7 @@
 """FORGE agent — implements Story Cards via an agentic tool-use loop."""
 
 import os
+import shlex
 import subprocess
 import yaml
 import jsonschema
@@ -66,7 +67,7 @@ def _tool_run_bash(command: str) -> str:
 
 def _tool_git_commit(message: str) -> str:
     result = subprocess.run(
-        f'git add -A && git commit -m "{message}" && git push origin HEAD',
+        f'git add -A && git commit -m {shlex.quote(message)} && git push origin HEAD',
         shell=True,
         capture_output=True,
         text=True,

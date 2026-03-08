@@ -73,6 +73,17 @@ Produce the Story Card YAML for Day {day}."""
     match = re.search(r"```(?:yaml)?\s*(.*?)```", raw, re.DOTALL)
     yaml_text = match.group(1).strip() if match else raw
 
+    # YAML double-quoted strings only allow a small set of escape sequences.
+    # The LLM sometimes embeds shell constructs like \| (grep OR) which are
+    # not valid YAML escapes and cause ScannerError. Strip the backslash from
+    # any unrecognised escape so the text parses cleanly.
+    _VALID_YAML_ESCAPES = set('0abttnvfeN_LP "\\/')
+    yaml_text = re.sub(
+        r'\\(.)',
+        lambda m: m.group(0) if m.group(1) in _VALID_YAML_ESCAPES else m.group(1),
+        yaml_text,
+    )
+
     story_card = yaml.safe_load(yaml_text)
     story_card["day"] = day
     story_card["agent"] = "PRIME"
