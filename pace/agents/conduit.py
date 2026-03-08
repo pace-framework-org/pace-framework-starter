@@ -6,7 +6,7 @@ import jsonschema
 from pathlib import Path
 from schemas import CONDUIT_REPORT_SCHEMA
 from config import load_config
-from llm import get_llm_adapter
+from llm import get_analysis_adapter
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 
@@ -45,7 +45,7 @@ def run_conduit(
     advisory_backlog: list[dict] | None = None,
 ) -> dict:
     cfg = load_config()
-    adapter = get_llm_adapter()
+    adapter = get_analysis_adapter()
 
     system_prompt = f"""You are the DevOps Agent (CONDUIT) for {cfg.product_name}.
 

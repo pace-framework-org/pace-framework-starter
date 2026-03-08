@@ -37,7 +37,8 @@ class TechConfig:
 @dataclass
 class LLMConfig:
     provider: str        # "anthropic" | "litellm"
-    model: str           # model ID (e.g. "claude-sonnet-4-6", "openai/gpt-4o")
+    model: str           # model ID for FORGE/SCRIBE (e.g. "claude-sonnet-4-6")
+    analysis_model: str  # model ID for PRIME/GATE/SENTINEL/CONDUIT — defaults to model
     base_url: str | None # optional endpoint override (e.g. for Ollama)
 
 
@@ -109,9 +110,11 @@ def load_config() -> PaceConfig:
     reporter_raw = raw.get("reporter", {})
     llm_raw = raw.get("llm", {})
 
+    forge_model = llm_raw.get("model", "claude-sonnet-4-6")
     llm = LLMConfig(
         provider=llm_raw.get("provider", "anthropic"),
-        model=llm_raw.get("model", "claude-sonnet-4-6"),
+        model=forge_model,
+        analysis_model=llm_raw.get("analysis_model", forge_model),
         base_url=llm_raw.get("base_url"),
     )
 

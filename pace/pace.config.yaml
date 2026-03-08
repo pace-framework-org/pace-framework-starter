@@ -125,7 +125,14 @@ llm:
   #               Env var: provider's own key (e.g. OPENAI_API_KEY, GEMINI_API_KEY)
   #
   provider: anthropic
+
+  # FORGE and SCRIBE use `model` — these agents write code and need strong reasoning.
   model: claude-sonnet-4-6
+
+  # PRIME, GATE, SENTINEL, CONDUIT use `analysis_model` — single-call analytical agents.
+  # Haiku is 4–5× cheaper and fast enough for structured YAML analysis.
+  # Omit to default to the same model as FORGE (no cost savings but no config required).
+  analysis_model: claude-haiku-4-5-20251001
 
   # LiteLLM model examples (uncomment and set provider: litellm to use):
   # model: openai/gpt-4o                              # OpenAI (OPENAI_API_KEY)

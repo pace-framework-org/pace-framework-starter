@@ -7,7 +7,7 @@ import jsonschema
 from pathlib import Path
 from schemas import GATE_REPORT_SCHEMA
 from config import load_config
-from llm import get_llm_adapter
+from llm import get_analysis_adapter
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 
@@ -48,7 +48,7 @@ def _load_context(doc: str) -> str:
 
 def run_gate(day: int, story_card: dict, handoff: dict, ci_result: dict | None = None) -> dict:
     cfg = load_config()
-    adapter = get_llm_adapter()
+    adapter = get_analysis_adapter()
 
     test_output = _run_tests(cfg.tech.test_command)
     integration_output = _run_integration_checks()

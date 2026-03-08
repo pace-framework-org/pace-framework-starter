@@ -6,7 +6,7 @@ import jsonschema
 from pathlib import Path
 from schemas import STORY_CARD_SCHEMA
 from config import load_config
-from llm import get_llm_adapter
+from llm import get_analysis_adapter
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 
@@ -18,7 +18,7 @@ def _load_context(doc: str) -> str:
 
 def run_prime(day: int, target: str, recent_gates: list[str]) -> dict:
     cfg = load_config()
-    adapter = get_llm_adapter()
+    adapter = get_analysis_adapter()
 
     system_prompt = f"""You are the Product Agent (PRIME) for {cfg.product_name}.
 

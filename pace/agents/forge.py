@@ -261,7 +261,7 @@ You have access to tools: read_file, write_file, run_bash, git_commit, confirm_r
 
     handoff_data: dict | None = None
     red_phase_confirmed: bool = False
-    max_iterations = 40
+    max_iterations = 25
 
     for iteration in range(max_iterations):
         response = adapter.chat(

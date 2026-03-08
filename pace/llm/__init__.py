@@ -29,20 +29,24 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from llm.base import LLMAdapter
 
 
-def get_llm_adapter() -> LLMAdapter:
+def get_llm_adapter(model: str | None = None) -> LLMAdapter:
     """Instantiate and return the LLMAdapter for the configured provider.
 
     Provider and model are read from pace.config.yaml → llm section.
     API keys are always read from environment variables.
+
+    Args:
+        model: Optional model override. If None, uses llm.model from config.
     """
     from config import load_config
     cfg = load_config()
     llm = cfg.llm
+    resolved_model = model or llm.model
 
     if llm.provider == "litellm":
         from llm.litellm_adapter import LiteLLMAdapter
         return LiteLLMAdapter(
-            model=llm.model,
+            model=resolved_model,
             base_url=llm.base_url,
             api_key=os.environ.get("LLM_API_KEY"),  # generic override; provider keys auto-picked by litellm
         )
@@ -50,9 +54,19 @@ def get_llm_adapter() -> LLMAdapter:
     # Default: anthropic
     from llm.anthropic_adapter import AnthropicAdapter
     return AnthropicAdapter(
-        model=llm.model,
+        model=resolved_model,
         api_key=os.environ.get("ANTHROPIC_API_KEY"),
     )
 
 
-__all__ = ["LLMAdapter", "get_llm_adapter"]
+def get_analysis_adapter() -> LLMAdapter:
+    """Return an adapter using the analysis_model (PRIME/GATE/SENTINEL/CONDUIT).
+
+    Falls back to the main model if analysis_model is not explicitly configured.
+    """
+    from config import load_config
+    cfg = load_config()
+    return get_llm_adapter(model=cfg.llm.analysis_model)
+
+
+__all__ = ["LLMAdapter", "get_llm_adapter", "get_analysis_adapter"]

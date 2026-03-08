@@ -47,7 +47,7 @@ REPO_ROOT = Path(__file__).parent.parent
 PACE_DIR = REPO_ROOT / ".pace"
 PLAN_FILE = Path(__file__).parent / "plan.yaml"
 PROGRESS_FILE = REPO_ROOT / "PROGRESS.md"
-MAX_RETRIES = 2
+MAX_RETRIES = 1
 
 
 class CycleAbortError(Exception):

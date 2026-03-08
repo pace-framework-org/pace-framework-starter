@@ -304,7 +304,7 @@ def run_scribe() -> None:
     ]
 
     docs_written: set[str] = set()
-    max_iterations = 50
+    max_iterations = 30
 
     for _ in range(max_iterations):
         response = adapter.chat(
