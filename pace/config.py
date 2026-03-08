@@ -53,6 +53,7 @@ class PaceConfig:
     platform_type: str          # "github" | "gitlab" | "bitbucket" | "jenkins" | "jira" | "local"
     llm: LLMConfig
     advisory_push_to_issues: bool  # Whether to open issues for backlogged advisory findings
+    reporter_timezone: str = "UTC"  # IANA timezone for timestamps (e.g. "America/New_York")
 
     def source_dirs_table(self) -> str:
         """Return a formatted table of source directories for use in agent system prompts."""
@@ -105,6 +106,7 @@ def load_config() -> PaceConfig:
 
     platform_raw = raw.get("platform", {})
     advisory_raw = raw.get("advisory", {})
+    reporter_raw = raw.get("reporter", {})
     llm_raw = raw.get("llm", {})
 
     llm = LLMConfig(
@@ -124,4 +126,5 @@ def load_config() -> PaceConfig:
         platform_type=platform_raw.get("type", "github"),
         llm=llm,
         advisory_push_to_issues=bool(advisory_raw.get("push_to_issues", False)),
+        reporter_timezone=reporter_raw.get("timezone", "UTC"),
     )
