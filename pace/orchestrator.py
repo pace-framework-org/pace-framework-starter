@@ -65,8 +65,10 @@ def _update_daily_spend(run_cost_usd: float) -> None:
     accumulated spend from earlier runs today (reset to 0 on a new calendar day).
     Only writes the variable when GITHUB_REPOSITORY is set (i.e. running in CI).
     """
-    from datetime import date
-    today = date.today().isoformat()
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo(os.environ.get("PACE_REPORTER_TIMEZONE", "UTC"))
+    today = datetime.now(tz).date().isoformat()
     prior = float(os.environ.get("PACE_SPEND_TODAY", "0") or "0")
     new_total = prior + run_cost_usd
     repo = os.environ.get("GITHUB_REPOSITORY", "")
