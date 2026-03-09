@@ -87,12 +87,19 @@ with `PACE_DAY={day + 1}` to proceed.
     # Escalation issue (written to a local file)
     # ------------------------------------------------------------------
 
-    def open_escalation_issue(self, day: int, day_dir: Path) -> str:
+    def open_escalation_issue(self, day: int, day_dir: Path, hold_reason: str = "") -> str:
         story_text = (day_dir / "story.md").read_text() if (day_dir / "story.md").exists() else "Not available"
         handoff_text = (day_dir / "handoff.md").read_text() if (day_dir / "handoff.md").exists() else "Not available"
         gate_text = (day_dir / "gate.md").read_text() if (day_dir / "gate.md").exists() else "Not available"
-        gate_data = yaml.safe_load(gate_text) if (day_dir / "gate.md").exists() else {}
-        hold_reason = gate_data.get("hold_reason", "Unknown — see gate report")
+        if not hold_reason:
+            gate_data = yaml.safe_load(gate_text) if (day_dir / "gate.md").exists() else {}
+            hold_reason = (gate_data or {}).get("hold_reason", "")
+        if not hold_reason and (day_dir / "sentinel.md").exists():
+            hold_reason = (yaml.safe_load((day_dir / "sentinel.md").read_text()) or {}).get("hold_reason", "")
+        if not hold_reason and (day_dir / "conduit.md").exists():
+            hold_reason = (yaml.safe_load((day_dir / "conduit.md").read_text()) or {}).get("hold_reason", "")
+        if not hold_reason:
+            hold_reason = "Unknown — see agent reports below"
 
         body = f"""# Escalated HOLD — Day {day}
 

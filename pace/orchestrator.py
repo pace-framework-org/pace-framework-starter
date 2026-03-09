@@ -160,7 +160,7 @@ def commit_artifact(path: Path, message: str) -> None:
     )
 
 
-def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: PlatformAdapter) -> bool:
+def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: PlatformAdapter) -> tuple[bool, str]:
     day_dir = PACE_DIR / f"day-{day}"
     day_dir.mkdir(parents=True, exist_ok=True)
 
@@ -256,9 +256,9 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
             handoff = run_forge(day, story_card, forge_hold)
         except Exception as exc:
             print(f"[PACE] FORGE failed with exception: {exc}")
+            hold_reason = f"FORGE exception: {exc}"
             if attempt > MAX_RETRIES:
-                return False
-            hold_reason = str(exc)
+                return False, hold_reason
             continue
 
         handoff["forge_cost_usd"] = round(spend_tracker.total_usd() - _forge_cost_before, 4)
@@ -294,7 +294,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
             print(f"[PACE] Day {day}: GATE HOLD (attempt {attempt}): {hold_reason}")
             commit_artifact(gate_file, f"Day {day}: GATE report — HOLD attempt {attempt}")
             if attempt > MAX_RETRIES:
-                return False
+                return False, hold_reason
             continue
 
         commit_artifact(gate_file, f"Day {day}: GATE report — PASS attempt {attempt}")
@@ -321,7 +321,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
             print(f"[PACE] Day {day}: SENTINEL HOLD (attempt {attempt}): {hold_reason}")
             commit_artifact(sentinel_file, f"Day {day}: SENTINEL report — HOLD attempt {attempt}")
             if attempt > MAX_RETRIES:
-                return False
+                return False, hold_reason
             continue
 
         if sentinel_decision == "ADVISORY":
@@ -370,7 +370,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
             print(f"[PACE] Day {day}: CONDUIT HOLD (attempt {attempt}): {hold_reason}")
             commit_artifact(conduit_file, f"Day {day}: CONDUIT report — HOLD attempt {attempt}")
             if attempt > MAX_RETRIES:
-                return False
+                return False, hold_reason
             continue
 
         if conduit_decision == "ADVISORY":
@@ -402,14 +402,14 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
             remaining = load_open_backlog()
             if remaining:
                 print(f"[PACE] Day {day}: Clearance day FAILED — {len(remaining)} advisory item(s) still open.")
-                return False
+                return False, "Clearance day: advisory items still open after all agents ran"
 
         # All checks passed — SHIP
         platform.post_daily_summary(day, gate_report)
         print(f"[PACE] Day {day}: GATE + SENTINEL + CONDUIT — SHIP")
-        return True
+        return True, ""
 
-    return False
+    return False, hold_reason or "Unknown — retries exhausted"
 
 
 def _run_day_zero(plan: dict) -> None:
@@ -486,7 +486,7 @@ def main() -> None:
 
     recent_gates = get_recent_gate_reports(day)
     try:
-        shipped = run_cycle(day, day_plan, recent_gates, platform)
+        shipped, _last_hold_reason = run_cycle(day, day_plan, recent_gates, platform)
     except CycleAbortError as exc:
         write_job_summary(day, "ABORT", None, None, None, None, abort_reason=str(exc), platform=platform)
         print(f"[PACE] Day {day}: Cycle aborted — {exc}")
@@ -499,7 +499,7 @@ def main() -> None:
     if not shipped:
         print(f"[PACE] Day {day}: Pipeline exhausted retries — opening escalation issue...")
         (day_dir / "escalated").touch()
-        platform.open_escalation_issue(day, day_dir)
+        platform.open_escalation_issue(day, day_dir, hold_reason=_last_hold_reason)
         write_job_summary(day, "HOLD", _load_story(day_dir), gate_report, sentinel_report, conduit_report, platform=platform)
         update_progress_md(day)
         commit_artifact(PROGRESS_FILE, f"Day {day}: PROGRESS.md update — HOLD/escalated")

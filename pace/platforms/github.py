@@ -106,16 +106,53 @@ To pause: Request changes and add a comment explaining what needs resolution.
     # Escalation issue
     # ------------------------------------------------------------------
 
-    def open_escalation_issue(self, day: int, day_dir: Path) -> str:
+    def open_escalation_issue(self, day: int, day_dir: Path, hold_reason: str = "") -> str:
         if not self._repo:
             print("[GitHub] No repo configured — skipping issue creation.")
             return ""
 
-        story_text = (day_dir / "story.md").read_text() if (day_dir / "story.md").exists() else "Not available"
-        handoff_text = (day_dir / "handoff.md").read_text() if (day_dir / "handoff.md").exists() else "Not available"
-        gate_text = (day_dir / "gate.md").read_text() if (day_dir / "gate.md").exists() else "Not available"
-        gate_data = yaml.safe_load(gate_text) if (day_dir / "gate.md").exists() else {}
-        hold_reason = gate_data.get("hold_reason", "Unknown — see gate report")
+        story_file = day_dir / "story.md"
+        handoff_file = day_dir / "handoff.md"
+        gate_file = day_dir / "gate.md"
+        sentinel_file = day_dir / "sentinel.md"
+        conduit_file = day_dir / "conduit.md"
+
+        story_text = story_file.read_text() if story_file.exists() else "Not available"
+        handoff_text = handoff_file.read_text() if handoff_file.exists() else "Not available"
+        gate_text = gate_file.read_text() if gate_file.exists() else "Not available"
+        sentinel_text = sentinel_file.read_text() if sentinel_file.exists() else None
+        conduit_text = conduit_file.read_text() if conduit_file.exists() else None
+
+        # Cascade: orchestrator-tracked reason → gate.md → sentinel.md → conduit.md → fallback
+        if not hold_reason:
+            gate_data = yaml.safe_load(gate_text) if gate_file.exists() else {}
+            hold_reason = (gate_data or {}).get("hold_reason", "")
+        if not hold_reason and sentinel_text:
+            sentinel_data = yaml.safe_load(sentinel_text) or {}
+            hold_reason = sentinel_data.get("hold_reason", "")
+        if not hold_reason and conduit_text:
+            conduit_data = yaml.safe_load(conduit_text) or {}
+            hold_reason = conduit_data.get("hold_reason", "")
+        if not hold_reason:
+            hold_reason = "Unknown — see agent reports below"
+
+        extra_sections = ""
+        if sentinel_text:
+            extra_sections += f"""
+### SENTINEL Report (last attempt)
+
+```yaml
+{sentinel_text}
+```
+"""
+        if conduit_text:
+            extra_sections += f"""
+### CONDUIT Report (last attempt)
+
+```yaml
+{conduit_text}
+```
+"""
 
         body = f"""## Escalated HOLD — Day {day}
 
@@ -142,8 +179,7 @@ PACE could not resolve this HOLD after 2 retries. Human intervention required.
 ```yaml
 {gate_text}
 ```
-
----
+{extra_sections}---
 
 ### To Resume
 

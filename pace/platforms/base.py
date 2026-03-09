@@ -34,12 +34,15 @@ class PlatformAdapter(ABC):
         """
 
     @abstractmethod
-    def open_escalation_issue(self, day: int, day_dir: Path) -> str:
+    def open_escalation_issue(self, day: int, day_dir: Path, hold_reason: str = "") -> str:
         """Open an escalation issue/ticket when FORGE exhausts all retries.
 
         Args:
-            day:     PACE day number.
-            day_dir: Path to .pace/day-N/ directory (contains story/handoff/gate files).
+            day:         PACE day number.
+            day_dir:     Path to .pace/day-N/ directory (contains story/handoff/gate files).
+            hold_reason: The blocker string accumulated by the orchestrator. When provided,
+                         this is used as the primary blocker description. If empty, each
+                         adapter falls back to reading the agent artifact files.
 
         Returns:
             URL of the opened issue, or empty string if unsupported / failed.
