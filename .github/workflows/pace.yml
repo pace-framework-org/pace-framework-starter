@@ -70,6 +70,7 @@ jobs:
           PACE_DAILY_BUDGET: ${{ vars.PACE_DAILY_BUDGET }}
           PACE_DAILY_SPEND: ${{ vars.PACE_DAILY_SPEND }}
           PACE_DAILY_SPEND_DATE: ${{ vars.PACE_DAILY_SPEND_DATE }}
+          PACE_REPORTER_TIMEZONE: ${{ vars.PACE_REPORTER_TIMEZONE || 'UTC' }}
         run: |
           # Manual workflow_dispatch runs always proceed — budget cap only applies to scheduled runs.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -79,7 +80,8 @@ jobs:
             exit 0
           fi
 
-          TODAY=$(date -u +%Y-%m-%d)
+          # Use the configured timezone so the budget day aligns with the team's calendar day.
+          TODAY=$(TZ="${PACE_REPORTER_TIMEZONE}" date +%Y-%m-%d)
           BUDGET="${PACE_DAILY_BUDGET:-0}"
           SPEND="${PACE_DAILY_SPEND:-0}"
 
