@@ -246,6 +246,16 @@ Rules:
 - Keep commits focused: one logical change per commit.
 - Do not modify files outside the source directories listed above.
 
+COVERAGE RULE — mandatory for every story:
+- Every production code file you create or modify must have corresponding tests.
+- Do not add a function, type, or module without a test case that exercises it.
+- Do not reduce the number of existing test cases — only add or extend them.
+- After Phase 2 (GREEN), run the full test suite and confirm it exits 0. If the
+  story card includes a CI-verified acceptance criterion, your implementation is
+  incomplete until that criterion passes locally.
+- When in doubt, write the test first (TDD Red phase), then implement to make it pass.
+  This is not optional — untested production code will cause CI to fail and GATE to HOLD.
+
 You have access to tools: read_file, write_file, run_bash, git_commit, confirm_red_phase, complete_handoff."""
 
     story_yaml = yaml.dump(story_card, default_flow_style=False, allow_unicode=True)
