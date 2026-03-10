@@ -15,6 +15,7 @@ permissions:
   contents: write       # push .pace/ artifacts and PROGRESS.md
   issues: write         # open escalation issues
   pull-requests: write  # open review gate PRs
+  actions: write        # set PACE_PAUSED and spend-tracking repository variables
 
 jobs:
   pace:
@@ -116,6 +117,22 @@ jobs:
           PACE_PAUSED: ${{ vars.PACE_PAUSED || 'false' }}
           PACE_SPEND_TODAY: ${{ env.PACE_SPEND_TODAY }}
         run: python pace/orchestrator.py
+
+      - name: Pause on escalated HOLD
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACE_CURRENT_DAY: ${{ inputs.day || vars.PACE_DAY }}
+        run: |
+          # Only pause if the orchestrator actually exhausted retries (escalated sentinel file present).
+          # CycleAbortError, preflight failures, and budget skips do not create this file.
+          ESCALATED_FILE=".pace/day-${PACE_CURRENT_DAY}/escalated"
+          if [ -f "$ESCALATED_FILE" ]; then
+            gh variable set PACE_PAUSED --body "true" --repo ${{ github.repository }}
+            echo "[PACE] PACE_PAUSED set to true (workflow fallback — escalated sentinel found)."
+          else
+            echo "[PACE] Run failed but no escalated sentinel — not pausing (abort or preflight failure)."
+          fi
 
       - name: Write job summary
         if: always()

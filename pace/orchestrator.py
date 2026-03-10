@@ -24,6 +24,10 @@ import sys
 import yaml
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from platforms.base import PlatformAdapter
 
 # Add the pace directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -58,12 +62,13 @@ class CycleAbortError(Exception):
     Unlike a HOLD, this does not trigger a platform escalation issue."""
 
 
-def _update_daily_spend(run_cost_usd: float) -> None:
-    """Accumulate this run's cost into PACE_DAILY_SPEND GitHub Variable.
+def _update_daily_spend(run_cost_usd: float, platform: "PlatformAdapter | None" = None) -> None:
+    """Accumulate this run's cost into PACE_DAILY_SPEND via the platform adapter.
 
     PACE_SPEND_TODAY is injected by pace.yml's budget-check step and holds the
     accumulated spend from earlier runs today (reset to 0 on a new calendar day).
-    Only writes the variable when GITHUB_REPOSITORY is set (i.e. running in CI).
+    Delegates to platform.set_variable() — each adapter handles persistence
+    appropriately (GitHub writes to Actions variables; others may no-op).
     """
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -71,21 +76,9 @@ def _update_daily_spend(run_cost_usd: float) -> None:
     today = datetime.now(tz).date().isoformat()
     prior = float(os.environ.get("PACE_SPEND_TODAY", "0") or "0")
     new_total = prior + run_cost_usd
-    repo = os.environ.get("GITHUB_REPOSITORY", "")
-    if not repo:
-        return
-    token = os.environ.get("GITHUB_TOKEN", "")
-    env = {**os.environ, "GH_TOKEN": token}
-    subprocess.run(
-        ["gh", "variable", "set", "PACE_DAILY_SPEND",
-         "--body", f"{new_total:.4f}", "--repo", repo],
-        check=False, env=env, capture_output=True,
-    )
-    subprocess.run(
-        ["gh", "variable", "set", "PACE_DAILY_SPEND_DATE",
-         "--body", today, "--repo", repo],
-        check=False, env=env, capture_output=True,
-    )
+    if platform is not None:
+        platform.set_variable("PACE_DAILY_SPEND", f"{new_total:.4f}")
+        platform.set_variable("PACE_DAILY_SPEND_DATE", today)
     print(f"[PACE] Daily spend updated: ${new_total:.4f} (this run: ${run_cost_usd:.4f})")
 
 
@@ -438,12 +431,14 @@ def _run_day_zero(plan: dict) -> None:
 
 
 def main() -> None:
-    # Register spend flush on exit — covers all sys.exit() paths.
+    # Mutable container so the spend flush closure can reference platform after it's created.
+    _platform_ref: list["PlatformAdapter | None"] = [None]
+
     def _flush_spend() -> None:
         cost = spend_tracker.total_usd()
         if cost > 0:
             print(f"[PACE] API usage this run:\n{spend_tracker.summary()}")
-            _update_daily_spend(cost)
+            _update_daily_spend(cost, _platform_ref[0])
 
     atexit.register(_flush_spend)
 
@@ -466,6 +461,7 @@ def main() -> None:
         sys.exit(1)
 
     platform = get_platform_adapter()
+    _platform_ref[0] = platform
 
     print(f"[PACE] === Day {day} — {day_plan['target']} ===")
 
@@ -500,10 +496,11 @@ def main() -> None:
         print(f"[PACE] Day {day}: Pipeline exhausted retries — opening escalation issue...")
         (day_dir / "escalated").touch()
         platform.open_escalation_issue(day, day_dir, hold_reason=_last_hold_reason)
+        platform.set_variable("PACE_PAUSED", "true")
         write_job_summary(day, "HOLD", _load_story(day_dir), gate_report, sentinel_report, conduit_report, platform=platform)
         update_progress_md(day)
         commit_artifact(PROGRESS_FILE, f"Day {day}: PROGRESS.md update — HOLD/escalated")
-        print("[PACE] Escalation issue opened. Set PACE_PAUSED=true or fix and re-run.")
+        print("[PACE] Escalation issue opened and PACE_PAUSED set to true. Resolve the issue, then set PACE_PAUSED=false to resume.")
         sys.exit(1)
 
     story_card = _load_story(day_dir)

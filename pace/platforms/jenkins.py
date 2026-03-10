@@ -176,7 +176,10 @@ PACE could not resolve this HOLD after 2 retries. Human intervention required.
 ## To Resume
 
 1. Resolve the blocker described above
-2. Re-run: `PACE_DAY={day} python pace/orchestrator.py`
+2. Set `PACE_PAUSED=false` in your Jenkins job/pipeline configuration or environment
+3. Re-run: `PACE_DAY={day} python pace/orchestrator.py`
+
+> **Note:** `PACE_PAUSED` was set to `true` to prevent the pipeline from retrying indefinitely.
 
 NOTE: Jenkins does not support automated issue creation. Consider integrating
 with a Git hosting platform (GitHub/GitLab) for issue tracking.
@@ -307,6 +310,20 @@ an external issue tracker (GitHub/GitLab/Jira) as platform.type.
         out_file.write_text(body)
         print(f"[Jenkins] Advisory written to: {out_file}")
         return str(out_file)
+
+    # ------------------------------------------------------------------
+    # CI/CD variable management
+    # ------------------------------------------------------------------
+
+    def set_variable(self, name: str, value: str) -> bool:
+        """Jenkins has no REST API for updating job environment variables at runtime.
+        Log the intent and return False (non-fatal)."""
+        print(
+            f"[Jenkins] set_variable({name!r}) — Jenkins does not support updating "
+            f"environment variables at runtime. Set {name}={value!r} manually in "
+            f"the job's environment configuration before the next run."
+        )
+        return False
 
 
 # ------------------------------------------------------------------

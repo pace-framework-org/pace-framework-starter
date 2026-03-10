@@ -105,3 +105,19 @@ class PlatformAdapter(ABC):
         Returns:
             URL of the opened issue/ticket, or empty string if unsupported / failed.
         """
+
+    def set_variable(self, name: str, value: str) -> bool:
+        """Set a CI/CD pipeline variable by name.
+
+        Used by the orchestrator to auto-pause the loop (PACE_PAUSED=true)
+        after a HOLD exhausts retries, and to update spend-tracking variables
+        (PACE_DAILY_SPEND, PACE_DAILY_SPEND_DATE).
+
+        Adapters that support mutable pipeline variables (GitHub, GitLab) override
+        this method. All others return False and log a message — the orchestrator
+        treats a False return as non-fatal.
+
+        Returns:
+            True on success, False if unsupported or if the API call fails.
+        """
+        return False
