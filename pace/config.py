@@ -4,9 +4,9 @@ Reads pace.config.yaml and exposes a PaceConfig dataclass used by all agents.
 Call load_config() once per agent invocation — it is fast (cached after first call).
 """
 
-PACE_VERSION = "1.2.0"
-
 from __future__ import annotations
+
+PACE_VERSION = "1.2.0"
 
 import yaml
 from dataclasses import dataclass, field
