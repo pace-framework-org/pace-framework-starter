@@ -145,3 +145,26 @@ cost_control:
   # estimates the cost before FORGE runs. If the estimate exceeds this value,
   # PRIME refinement is triggered. Set to 0 to disable the cost pre-check.
   max_story_cost_usd: 1.50
+
+# ---------------------------------------------------------------------------
+# FORGE agent behaviour
+# ---------------------------------------------------------------------------
+forge:
+  # Enforce mandatory 4-phase TDD: RED → GREEN → REFACTOR → COMMIT.
+  # When true, FORGE must call confirm_red_phase (with failing test evidence)
+  # before it can write any implementation code. complete_handoff is blocked
+  # until confirm_red_phase has been called successfully.
+  # Set false for stories with nothing to test (docs, infra config, migrations).
+  tdd_enforcement: true
+
+  # Include the coverage rule in FORGE's system prompt.
+  # When true, FORGE is instructed that every production file it creates or
+  # modifies must have corresponding tests, and it must not reduce existing
+  # test counts.
+  # Effective only when tdd_enforcement is true; ignored when false.
+  coverage_rule: true
+
+  # Maximum number of tool-use iterations FORGE may take per story.
+  # Raise for complex multi-file stories; lower to cap cost on simpler ones.
+  # Default: 35.
+  max_iterations: 35

@@ -12,6 +12,68 @@ from llm import get_llm_adapter
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 
+# ---------------------------------------------------------------------------
+# System prompt building blocks — included/excluded based on forge config
+# ---------------------------------------------------------------------------
+
+_TDD_PHASES = """
+Your job is to implement the Story Card exactly as specified. No more, no less.
+Follow strict Test-Driven Development. You MUST complete every phase in order:
+
+PHASE 1 — RED (write failing tests)
+  a. Read existing source files to understand structure and conventions.
+  b. Write ONLY test files that assert the acceptance criteria. No implementation yet.
+  c. Run the test suite with run_bash. Confirm at least one new test fails.
+  d. Call confirm_red_phase with the failing test output as evidence.
+     You CANNOT proceed to Phase 2 without calling confirm_red_phase.
+
+PHASE 2 — GREEN (write minimum implementation)
+  a. Write the minimum production code to make the failing tests pass.
+  b. Run the test suite. If tests still fail, fix only what is needed — do not rewrite tests.
+  c. All acceptance criteria tests must pass before continuing.
+
+PHASE 3 — REFACTOR (clean up)
+  a. Remove duplication or dead code introduced during Green. Tests must remain green.
+  b. Run the test suite one final time to confirm.
+
+PHASE 4 — COMMIT & HANDOFF
+  a. Run git_commit with a message that names the story.
+  b. Run git rev-parse HEAD to get the SHA.
+  c. Call complete_handoff as your final action.
+
+Rules:
+- Do not add features, abstractions, or error handling for scenarios outside the story.
+- Never modify a test to make it pass — fix the implementation instead.
+- Keep commits focused: one logical change per commit.
+- Do not modify files outside the source directories listed above."""
+
+_BASIC_WORKFLOW = """
+Your job is to implement the Story Card exactly as specified. No more, no less.
+
+Workflow:
+  1. Read existing source files to understand structure and conventions.
+  2. Implement the acceptance criteria.
+  3. Run the test suite to verify your changes.
+  4. Run git_commit with a message that names the story.
+  5. Run git rev-parse HEAD to get the SHA.
+  6. Call complete_handoff as your final action.
+
+Rules:
+- Do not add features, abstractions, or error handling for scenarios outside the story.
+- Keep commits focused: one logical change per commit.
+- Do not modify files outside the source directories listed above."""
+
+_COVERAGE_RULE = """
+COVERAGE RULE — mandatory for every story:
+- Every production code file you create or modify must have corresponding tests.
+- Do not add a function, type, or module without a test case that exercises it.
+- Do not reduce the number of existing test cases — only add or extend them.
+- After implementing, run the full test suite and confirm it exits 0. If the
+  story card includes a CI-verified acceptance criterion, your implementation is
+  incomplete until that criterion passes locally.
+- When in doubt, write the test first (TDD Red phase), then implement to make it pass.
+  This is not optional — untested production code will cause CI to fail and GATE to HOLD."""
+
 # Allowed bash commands — block anything dangerous
 ALLOWED_PREFIXES = (
     "go ", "python ", "python3 ", "pytest", "npm ", "yarn ", "cargo ",
@@ -78,7 +140,7 @@ def _tool_git_commit(message: str) -> str:
     return f"OK: committed and pushed — {result.stdout.strip()}"
 
 
-TOOLS = [
+_BASE_TOOLS = [
     {
         "name": "read_file",
         "description": "Read the contents of a file in the repository.",
@@ -119,29 +181,6 @@ TOOLS = [
         },
     },
     {
-        "name": "confirm_red_phase",
-        "description": (
-            "REQUIRED TDD checkpoint. Call this after running the test suite and confirming "
-            "that at least one new test fails. Provide the failing test output as evidence. "
-            "You must call this before writing any implementation code."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "failing_tests": {
-                    "type": "string",
-                    "description": "The test runner output showing at least one failing test.",
-                },
-                "tests_written": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of test file paths written in Phase 1.",
-                },
-            },
-            "required": ["failing_tests", "tests_written"],
-        },
-    },
-    {
         "name": "complete_handoff",
         "description": "Signal implementation complete. Call this as your final action.",
         "input_schema": {
@@ -159,6 +198,38 @@ TOOLS = [
         },
     },
 ]
+
+_CONFIRM_RED_PHASE_TOOL = {
+    "name": "confirm_red_phase",
+    "description": (
+        "REQUIRED TDD checkpoint. Call this after running the test suite and confirming "
+        "that at least one new test fails. Provide the failing test output as evidence. "
+        "You must call this before writing any implementation code."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "failing_tests": {
+                "type": "string",
+                "description": "The test runner output showing at least one failing test.",
+            },
+            "tests_written": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of test file paths written in Phase 1.",
+            },
+        },
+        "required": ["failing_tests", "tests_written"],
+    },
+}
+
+
+def _build_tools(tdd_enforcement: bool) -> list:
+    """Return the tool list, inserting confirm_red_phase before complete_handoff when TDD is on."""
+    if not tdd_enforcement:
+        return _BASE_TOOLS
+    # Insert confirm_red_phase just before complete_handoff (last entry)
+    return _BASE_TOOLS[:-1] + [_CONFIRM_RED_PHASE_TOOL, _BASE_TOOLS[-1]]
 
 
 def _dispatch_tool(name: str, inputs: dict) -> str:
@@ -203,6 +274,11 @@ def run_forge(day: int, story_card: dict, hold_reason: str | None = None) -> dic
     build_cmd_note = f"Build: {cfg.tech.build_command}" if cfg.tech.build_command else ""
     test_cmd_note = f"Test: {cfg.tech.test_command}"
 
+    tdd_on = cfg.forge.tdd_enforcement
+    workflow_section = _TDD_PHASES if tdd_on else _BASIC_WORKFLOW
+    coverage_section = _COVERAGE_RULE if cfg.forge.coverage_rule else ""
+    tools_list = "read_file, write_file, run_bash, git_commit" + (", confirm_red_phase" if tdd_on else "") + ", complete_handoff"
+
     system_prompt = f"""You are the Engineering Agent (FORGE) for {cfg.product_name}.
 
 {cfg.product_description}
@@ -215,48 +291,9 @@ Do NOT write into pace/, .pace/, or the repo root.
 Tech stack: {cfg.tech.primary_language}{f', {cfg.tech.secondary_language}' if cfg.tech.secondary_language else ''}. CI: {cfg.tech.ci_system}.
 {build_cmd_note}
 {test_cmd_note}
-
-Your job is to implement the Story Card exactly as specified. No more, no less.
-Follow strict Test-Driven Development. You MUST complete every phase in order:
-
-PHASE 1 — RED (write failing tests)
-  a. Read existing source files to understand structure and conventions.
-  b. Write ONLY test files that assert the acceptance criteria. No implementation yet.
-  c. Run the test suite with run_bash. Confirm at least one new test fails.
-  d. Call confirm_red_phase with the failing test output as evidence.
-     You CANNOT proceed to Phase 2 without calling confirm_red_phase.
-
-PHASE 2 — GREEN (write minimum implementation)
-  a. Write the minimum production code to make the failing tests pass.
-  b. Run the test suite. If tests still fail, fix only what is needed — do not rewrite tests.
-  c. All acceptance criteria tests must pass before continuing.
-
-PHASE 3 — REFACTOR (clean up)
-  a. Remove duplication or dead code introduced during Green. Tests must remain green.
-  b. Run the test suite one final time to confirm.
-
-PHASE 4 — COMMIT & HANDOFF
-  a. Run git_commit with a message that names the story.
-  b. Run git rev-parse HEAD to get the SHA.
-  c. Call complete_handoff as your final action.
-
-Rules:
-- Do not add features, abstractions, or error handling for scenarios outside the story.
-- Never modify a test to make it pass — fix the implementation instead.
-- Keep commits focused: one logical change per commit.
-- Do not modify files outside the source directories listed above.
-
-COVERAGE RULE — mandatory for every story:
-- Every production code file you create or modify must have corresponding tests.
-- Do not add a function, type, or module without a test case that exercises it.
-- Do not reduce the number of existing test cases — only add or extend them.
-- After Phase 2 (GREEN), run the full test suite and confirm it exits 0. If the
-  story card includes a CI-verified acceptance criterion, your implementation is
-  incomplete until that criterion passes locally.
-- When in doubt, write the test first (TDD Red phase), then implement to make it pass.
-  This is not optional — untested production code will cause CI to fail and GATE to HOLD.
-
-You have access to tools: read_file, write_file, run_bash, git_commit, confirm_red_phase, complete_handoff."""
+{workflow_section}
+{coverage_section}
+You have access to tools: {tools_list}."""
 
     story_yaml = yaml.dump(story_card, default_flow_style=False, allow_unicode=True)
     engineering_ctx = _load_context("engineering.md")
@@ -270,16 +307,16 @@ You have access to tools: read_file, write_file, run_bash, git_commit, confirm_r
     messages = [{"role": "user", "content": user_content}]
 
     handoff_data: dict | None = None
-    # On retry attempts (hold_reason present), implementation is already committed.
-    # Skip the TDD red-phase gate so FORGE can verify and complete_handoff immediately.
-    red_phase_confirmed: bool = bool(hold_reason)
-    max_iterations = 35  # safety limit on the agentic loop
+    # red_phase_confirmed starts True when TDD is off or on a retry (code already committed).
+    red_phase_confirmed: bool = (not tdd_on) or bool(hold_reason)
+    tools = _build_tools(tdd_on)
+    max_iterations = cfg.forge.max_iterations
 
     for iteration in range(max_iterations):
         response = adapter.chat(
             system=system_prompt,
             messages=messages,
-            tools=TOOLS,
+            tools=tools,
             max_tokens=8096,
         )
 
@@ -328,6 +365,7 @@ You have access to tools: read_file, write_file, run_bash, git_commit, confirm_r
                 handoff_data["day"] = day
                 handoff_data["agent"] = "FORGE"
                 handoff_data["tdd_red_phase_confirmed"] = True
+                handoff_data["iterations_used"] = iteration + 1
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": call.id,

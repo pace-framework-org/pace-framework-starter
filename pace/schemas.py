@@ -29,6 +29,7 @@ HANDOFF_SCHEMA = {
         "built": {"type": "string"},
         "edge_cases_tested": {"type": "array", "items": {"type": "string"}},
         "known_gaps": {"type": "array", "items": {"type": "string"}},
+        "iterations_used": {"type": "integer"},
     },
     "additionalProperties": True,
 }

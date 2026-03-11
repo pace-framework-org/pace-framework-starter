@@ -49,6 +49,13 @@ class CostControlConfig:
 
 
 @dataclass
+class ForgeConfig:
+    tdd_enforcement: bool = True  # mandatory 4-phase TDD with confirm_red_phase gate
+    coverage_rule: bool = True    # every production file created/modified must have tests
+    max_iterations: int = 35      # safety limit on the agentic tool-use loop
+
+
+@dataclass
 class PaceConfig:
     product_name: str
     product_description: str
@@ -61,6 +68,7 @@ class PaceConfig:
     tracker_type: str           # "jira" | "github" | "gitlab" | "bitbucket" | "local"
     llm: LLMConfig
     cost_control: CostControlConfig  # Proactive story scoping thresholds
+    forge: ForgeConfig               # FORGE agent behaviour (TDD, coverage rule)
     advisory_push_to_issues: bool  # Whether to open issues for backlogged advisory findings
     reporter_timezone: str = "UTC"  # IANA timezone for timestamps (e.g. "America/New_York")
 
@@ -132,6 +140,13 @@ def load_config() -> PaceConfig:
         max_story_cost_usd=float(cc_raw.get("max_story_cost_usd", 0.0)),
     )
 
+    forge_raw = raw.get("forge", {})
+    forge = ForgeConfig(
+        tdd_enforcement=bool(forge_raw.get("tdd_enforcement", True)),
+        coverage_rule=bool(forge_raw.get("coverage_rule", True)),
+        max_iterations=int(forge_raw.get("max_iterations", 35)),
+    )
+
     return PaceConfig(
         product_name=product.get("name", "My Product"),
         product_description=str(product.get("description", "")).strip(),
@@ -144,6 +159,7 @@ def load_config() -> PaceConfig:
         tracker_type=platform_raw.get("tracker") or platform_raw.get("type", "github"),
         llm=llm,
         cost_control=cost_control,
+        forge=forge,
         advisory_push_to_issues=bool(advisory_raw.get("push_to_issues", False)),
         reporter_timezone=reporter_raw.get("timezone", "UTC"),
     )
