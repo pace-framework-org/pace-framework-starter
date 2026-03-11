@@ -98,11 +98,19 @@ def _tool_read_file(path: str) -> str:
     target = REPO_ROOT / path
     if not target.exists():
         return f"ERROR: File not found: {path}"
+    if target.is_dir():
+        files = sorted(str(p.relative_to(REPO_ROOT)) for p in target.iterdir() if p.is_file())
+        return f"ERROR: '{path}' is a directory. Files inside: {files}"
     return target.read_text(encoding="utf-8")
 
 
 def _tool_write_file(path: str, content: str) -> str:
     target = REPO_ROOT / path
+    if target.is_dir():
+        return (
+            f"ERROR: '{path}' is a directory, not a file. "
+            f"Specify the full file path (e.g. '{path}/action.yml')."
+        )
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
     return f"OK: wrote {len(content)} bytes to {path}"
