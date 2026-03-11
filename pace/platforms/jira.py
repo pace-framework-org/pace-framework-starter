@@ -135,7 +135,10 @@ class JiraTrackerAdapter(TrackerAdapter):
                 headers={"Accept": "application/json", "Content-Type": "application/json"},
                 timeout=15,
             )
-            resp.raise_for_status()
+            if not resp.ok:
+                print(f"[Jira] Failed to create issue: {resp.status_code} {resp.reason}")
+                print(f"[Jira] Response body: {resp.text[:1000]}")
+                return ""
             data = resp.json()
             key = data.get("key", "")
             url = f"{self._base}/browse/{key}" if key else ""
