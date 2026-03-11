@@ -65,32 +65,13 @@ tech:
 # Platform — CI/CD and Git hosting integration
 # ---------------------------------------------------------------------------
 platform:
-  # Supported values: github | gitlab | bitbucket | jenkins | jira | local
-  #
-  #   github    — GitHub Actions CI + GitHub API (PRs, Issues)
-  #               Env vars: GITHUB_TOKEN, GITHUB_REPOSITORY
-  #
-  #   gitlab    — GitLab CI pipelines + GitLab API (MRs, Issues)
-  #               Env vars: GITLAB_TOKEN, GITLAB_PROJECT, GITLAB_URL (optional)
-  #
-  #   bitbucket — Bitbucket Cloud Pipelines + Bitbucket API (PRs, Issues)
-  #               Env vars: BITBUCKET_USER, BITBUCKET_APP_PASSWORD,
-  #                         BITBUCKET_WORKSPACE, BITBUCKET_REPO_SLUG
-  #               Note: Issues must be enabled on the repo; Pipelines must be on.
-  #
-  #   jenkins   — Jenkins REST API for CI polling; PR/issue written to local files
-  #               Env vars: JENKINS_URL, JENKINS_USER, JENKINS_TOKEN, JENKINS_JOB_NAME
-  #
-  #   jira      — Jira Cloud for escalation tickets and advisory issues.
-  #               CI polling and PR/MR creation are not supported — use alongside
-  #               jenkins or github for code hosting / CI.
-  #               Env vars: JIRA_URL, JIRA_EMAIL, JIRA_TOKEN, JIRA_PROJECT_KEY
-  #               JIRA_URL example: https://mycompany.atlassian.net
-  #               JIRA_TOKEN: create at id.atlassian.com → Security → API tokens
-  #
-  #   local     — No platform; CI skipped; PR/issue artifacts written to .pace/
-  #               No env vars required
-  type: github
+  # CI/CD platform — handles PRs/MRs, CI polling, and job summaries.
+  # Supported values: github | gitlab | bitbucket | jenkins | local
+  ci: github
+
+  # Sprint tracker — handles HOLD escalations and advisory findings.
+  # Supported values: jira | github | gitlab | bitbucket | local
+  tracker: github
 
 # ---------------------------------------------------------------------------
 # Advisory backlog — controls how non-blocking findings are surfaced

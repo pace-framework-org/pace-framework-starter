@@ -1,7 +1,17 @@
-"""PACE Platform Adapter — abstract base class.
+"""PACE Platform Adapter — abstract base classes.
 
-All platform-specific integrations (GitHub, GitLab, Jenkins, Local) implement this
-interface. The orchestrator only calls methods defined here.
+Two separate adapters are required for each deployment:
+
+  CIAdapter      — CI/CD and Git-hosting integration (PRs/MRs, CI polling,
+                   job summaries).  Implementations: GitHub, GitLab, Bitbucket,
+                   Jenkins, Local.
+
+  TrackerAdapter — Sprint-tracker / issue-platform integration (HOLD escalations,
+                   advisory findings).  Implementations: Jira, GitHub Issues,
+                   GitLab Issues, Bitbucket Issues, Local.
+
+This two-adapter design lets you mix platforms (e.g. Bitbucket CI + Jira tracker)
+without coupling them together.
 """
 
 from __future__ import annotations
@@ -10,15 +20,14 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 
-class PlatformAdapter(ABC):
-    """Abstract interface for all PACE platform integrations.
+class CIAdapter(ABC):
+    """Abstract interface for CI/CD and Git-hosting integrations.
 
-    Five operations are required:
-      1. open_review_pr      — human gate: open a PR/MR for human review
-      2. open_escalation_issue — open a ticket/issue when retries are exhausted
-      3. wait_for_commit_ci  — poll CI until the commit reaches a terminal state
-      4. post_daily_summary  — brief status line to the platform (comment, log, etc.)
-      5. write_job_summary   — write the full markdown report to the job/run UI
+    Required operations:
+      1. open_review_pr     — human gate: open a PR/MR for human review
+      2. wait_for_commit_ci — poll CI until the commit reaches a terminal state
+      3. post_daily_summary — brief status line to the platform
+      4. write_job_summary  — write the full markdown report to the job/run UI
     """
 
     @abstractmethod
@@ -34,21 +43,6 @@ class PlatformAdapter(ABC):
         """
 
     @abstractmethod
-    def open_escalation_issue(self, day: int, day_dir: Path, hold_reason: str = "") -> str:
-        """Open an escalation issue/ticket when FORGE exhausts all retries.
-
-        Args:
-            day:         PACE day number.
-            day_dir:     Path to .pace/day-N/ directory (contains story/handoff/gate files).
-            hold_reason: The blocker string accumulated by the orchestrator. When provided,
-                         this is used as the primary blocker description. If empty, each
-                         adapter falls back to reading the agent artifact files.
-
-        Returns:
-            URL of the opened issue, or empty string if unsupported / failed.
-        """
-
-    @abstractmethod
     def wait_for_commit_ci(
         self,
         sha: str,
@@ -59,7 +53,7 @@ class PlatformAdapter(ABC):
 
         Args:
             sha:             Git commit SHA to watch.
-            timeout_minutes: Hard timeout before returning `timed_out`.
+            timeout_minutes: Hard timeout before returning ``timed_out``.
             poll_interval:   Seconds between poll requests.
 
         Returns:
@@ -88,6 +82,45 @@ class PlatformAdapter(ABC):
         For Local:  writes to pace-summary.md in the repo root.
         """
 
+    def set_variable(self, name: str, value: str) -> bool:
+        """Set a CI/CD pipeline variable by name.
+
+        Used by the orchestrator to auto-pause the loop (PACE_PAUSED=true)
+        after a HOLD exhausts retries, and to update spend-tracking variables.
+
+        Adapters that support mutable pipeline variables (GitHub, GitLab) override
+        this method. All others return False and log a message — the orchestrator
+        treats a False return as non-fatal.
+
+        Returns:
+            True on success, False if unsupported or if the API call fails.
+        """
+        return False
+
+
+class TrackerAdapter(ABC):
+    """Abstract interface for sprint-tracker / issue-platform integrations.
+
+    Required operations:
+      1. open_escalation_issue — open a ticket when FORGE exhausts all retries
+      2. push_advisory_items   — open a ticket for backlisted advisory findings
+    """
+
+    @abstractmethod
+    def open_escalation_issue(self, day: int, day_dir: Path, hold_reason: str = "") -> str:
+        """Open an escalation issue/ticket when FORGE exhausts all retries.
+
+        Args:
+            day:         PACE day number.
+            day_dir:     Path to .pace/day-N/ directory (contains story/handoff/gate files).
+            hold_reason: The blocker string accumulated by the orchestrator. When provided,
+                         this is used as the primary blocker description. If empty, each
+                         adapter falls back to reading the agent artifact files.
+
+        Returns:
+            URL of the opened issue, or empty string if unsupported / failed.
+        """
+
     @abstractmethod
     def push_advisory_items(self, day: int, items: list[dict], agent: str) -> str:
         """Open an issue/ticket for newly backlisted advisory findings.
@@ -105,19 +138,3 @@ class PlatformAdapter(ABC):
         Returns:
             URL of the opened issue/ticket, or empty string if unsupported / failed.
         """
-
-    def set_variable(self, name: str, value: str) -> bool:
-        """Set a CI/CD pipeline variable by name.
-
-        Used by the orchestrator to auto-pause the loop (PACE_PAUSED=true)
-        after a HOLD exhausts retries, and to update spend-tracking variables
-        (PACE_DAILY_SPEND, PACE_DAILY_SPEND_DATE).
-
-        Adapters that support mutable pipeline variables (GitHub, GitLab) override
-        this method. All others return False and log a message — the orchestrator
-        treats a False return as non-fatal.
-
-        Returns:
-            True on success, False if unsupported or if the API call fails.
-        """
-        return False

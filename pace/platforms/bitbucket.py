@@ -1,21 +1,15 @@
-"""PACE Bitbucket Platform Adapter.
+"""PACE Bitbucket Platform Adapters.
 
-Uses the Bitbucket Cloud REST API v2 to open PRs, issues, and poll pipeline status.
+BitbucketCIAdapter     — CI/CD and PR integration via Bitbucket Cloud REST API v2.
+BitbucketTrackerAdapter — Issue tracking via Bitbucket Issues (if enabled on the repo).
 
-Required environment variables:
-    BITBUCKET_USER          — Bitbucket username (for app password auth)
-    BITBUCKET_APP_PASSWORD  — App password (Settings → App passwords → create one
-                              with: Repositories:Write, Pull requests:Write,
-                              Issues:Write, Pipelines:Read)
-    BITBUCKET_WORKSPACE     — Workspace slug (e.g. "my-org")
-    BITBUCKET_REPO_SLUG     — Repository slug (e.g. "my-project")
+Both adapters share credentials:
+    BITBUCKET_API_TOKEN  — repository access token (Bearer auth)
+    BITBUCKET_WORKSPACE  — workspace slug (e.g. "myteam")
+    BITBUCKET_REPO_SLUG  — repository slug (e.g. "my-service")
 
-Notes:
-    - Issues must be enabled on the repository (Settings → Issue tracker).
-    - Bitbucket Pipelines must be enabled for CI polling to work.
-    - App passwords are preferred over OAuth for CI/CD use.
-    - This adapter targets Bitbucket Cloud; Bitbucket Data Center uses a
-      different API — use the Jenkins adapter for self-hosted DC instances.
+Note: Bitbucket Issues are a basic tracker (no sprints/epics). For sprint-level
+tracking consider using Jira (platform.tracker: jira) alongside Bitbucket CI.
 """
 
 from __future__ import annotations
@@ -25,43 +19,46 @@ import yaml
 from pathlib import Path
 
 try:
-    import requests
+    import requests as _requests
     _REQUESTS_AVAILABLE = True
 except ImportError:
     _REQUESTS_AVAILABLE = False
 
-from platforms.base import PlatformAdapter
+from platforms.base import CIAdapter, TrackerAdapter
 
-_API_BASE = "https://api.bitbucket.org/2.0"
 _REPO_ROOT = Path(__file__).parent.parent.parent
+_BB_API = "https://api.bitbucket.org/2.0"
 
 
-class BitbucketAdapter(PlatformAdapter):
-    def __init__(self, user: str, app_password: str, workspace: str, repo_slug: str) -> None:
-        self._auth = (user, app_password) if user and app_password else None
+class _BitbucketBase:
+    """Shared credentials and HTTP helper for Bitbucket adapters."""
+
+    def __init__(self, token: str, workspace: str, repo_slug: str) -> None:
+        self._token = token
         self._workspace = workspace
         self._repo_slug = repo_slug
-        self._available = _REQUESTS_AVAILABLE and bool(workspace) and bool(repo_slug) and self._auth is not None
-
+        self._available = _REQUESTS_AVAILABLE and bool(token) and bool(workspace) and bool(repo_slug)
         if not _REQUESTS_AVAILABLE:
             print("[Bitbucket] 'requests' not installed. Run: pip install requests")
-        elif not self._auth:
-            print("[Bitbucket] BITBUCKET_USER and BITBUCKET_APP_PASSWORD are required.")
-        elif not workspace or not repo_slug:
-            print("[Bitbucket] BITBUCKET_WORKSPACE and BITBUCKET_REPO_SLUG are required.")
+        elif not token:
+            print("[Bitbucket] BITBUCKET_API_TOKEN not set.")
+        elif not workspace:
+            print("[Bitbucket] BITBUCKET_WORKSPACE not set.")
+        elif not repo_slug:
+            print("[Bitbucket] BITBUCKET_REPO_SLUG not set.")
 
-    def _url(self, path: str) -> str:
-        return f"{_API_BASE}/repositories/{self._workspace}/{self._repo_slug}{path}"
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type": "application/json",
+        }
 
-    def _get(self, path: str, params: dict | None = None) -> dict:
-        resp = requests.get(self._url(path), auth=self._auth, params=params, timeout=15)
-        resp.raise_for_status()
-        return resp.json()
+    def _repo_url(self, path: str = "") -> str:
+        base = f"{_BB_API}/repositories/{self._workspace}/{self._repo_slug}"
+        return f"{base}/{path.lstrip('/')}" if path else base
 
-    def _post(self, path: str, json: dict) -> dict:
-        resp = requests.post(self._url(path), auth=self._auth, json=json, timeout=15)
-        resp.raise_for_status()
-        return resp.json()
+
+class BitbucketCIAdapter(_BitbucketBase, CIAdapter):
 
     # ------------------------------------------------------------------
     # Review PR
@@ -97,9 +94,7 @@ class BitbucketAdapter(PlatformAdapter):
             else "None"
         )
 
-        description = f"""## PACE Review Gate — {period}
-
-### Summary
+        description = f"""## Summary
 
 | Metric | Value |
 | --- | --- |
@@ -107,33 +102,169 @@ class BitbucketAdapter(PlatformAdapter):
 | SHIP rate | {ship_rate} |
 | Escalated HOLDs | {hold_count} |
 
-### Deferred Acceptance Criteria
+## Deferred Acceptance Criteria
 
 {deferred_section}
 
-### To Continue
+## To Continue
 
-Merge this PR. The PACE loop resumes on the next scheduled run.
+Merge this PR to proceed to Day {day + 1}, or decline it to pause the cycle.
 
 ---
 
 *Generated by PACE Orchestrator — Day {day}*"""
 
-        branch = f"pace/review-day-{day}"
         try:
-            pr = self._post("/pullrequests", {
-                "title": f"PACE Review Gate — {period}",
-                "description": description,
-                "source": {"branch": {"name": branch}},
-                "destination": {"branch": {"name": "main"}},
-                "close_source_branch": False,
-            })
-            url = pr.get("links", {}).get("html", {}).get("href", "")
+            # Get default branch
+            resp = _requests.get(self._repo_url(), headers=self._headers(), timeout=15)
+            resp.raise_for_status()
+            main_branch = resp.json().get("mainbranch", {}).get("name", "main")
+
+            resp = _requests.post(
+                self._repo_url("pullrequests"),
+                headers=self._headers(),
+                json={
+                    "title": f"[PACE Review Gate] {period}",
+                    "description": description,
+                    "source": {"branch": {"name": f"pace/review-day-{day}"}},
+                    "destination": {"branch": {"name": main_branch}},
+                    "close_source_branch": True,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            url = resp.json().get("links", {}).get("html", {}).get("href", "")
             print(f"[Bitbucket] Review PR opened: {url}")
             return url
         except Exception as e:
-            print(f"[Bitbucket] Failed to open PR: {e}")
+            print(f"[Bitbucket] Failed to open review PR: {e}")
             return ""
+
+    # ------------------------------------------------------------------
+    # CI polling — Bitbucket Pipelines
+    # ------------------------------------------------------------------
+
+    def wait_for_commit_ci(
+        self,
+        sha: str,
+        timeout_minutes: int = 15,
+        poll_interval: int = 20,
+    ) -> dict:
+        if not self._available or not sha:
+            print("[Bitbucket] CI polling unavailable — returning no_runs.")
+            return {"conclusion": "no_runs", "url": "", "name": "", "sha": sha or ""}
+
+        deadline = time.time() + timeout_minutes * 60
+        print(f"[Bitbucket] Waiting for pipeline on {sha[:8]} (timeout: {timeout_minutes}m)...")
+
+        while time.time() < deadline:
+            try:
+                resp = _requests.get(
+                    self._repo_url(f"pipelines/?target.commit.hash={sha}&sort=-created_on&pagelen=5"),
+                    headers=self._headers(),
+                    timeout=15,
+                )
+                resp.raise_for_status()
+                pipelines = resp.json().get("values", [])
+            except Exception as e:
+                print(f"[Bitbucket] API error: {e}")
+                time.sleep(poll_interval)
+                continue
+
+            if not pipelines:
+                print(f"[Bitbucket] No pipelines found yet for {sha[:8]}, waiting...")
+                time.sleep(poll_interval)
+                continue
+
+            pipeline = pipelines[0]
+            state = pipeline.get("state", {})
+            stage = state.get("name", "")
+
+            if stage in ("PENDING", "IN_PROGRESS"):
+                print(f"[Bitbucket] Pipeline {pipeline.get('build_number', '?')} {stage}, waiting...")
+                time.sleep(poll_interval)
+                continue
+
+            result = state.get("result", {}).get("name", "")
+            conclusion = _map_bitbucket_result(result)
+            build_number = pipeline.get("build_number", "?")
+            web_url = (
+                f"https://bitbucket.org/{self._workspace}/{self._repo_slug}"
+                f"/pipelines/results/{build_number}"
+            )
+            print(f"[Bitbucket] Pipeline #{build_number} complete — {result}")
+            return {
+                "conclusion": conclusion,
+                "url": web_url,
+                "name": f"pipeline #{build_number}",
+                "sha": sha,
+            }
+
+        print(f"[Bitbucket] CI wait timed out after {timeout_minutes}m for {sha[:8]}")
+        return {"conclusion": "timeout", "url": "", "name": "", "sha": sha}
+
+    # ------------------------------------------------------------------
+    # Summary / reporting
+    # ------------------------------------------------------------------
+
+    def post_daily_summary(self, day: int, gate_report: dict) -> None:
+        decision = gate_report.get("gate_decision", "UNKNOWN")
+        icon = "✅" if decision == "SHIP" else "🔴"
+        print(f"[Bitbucket] Day {day} summary: {icon} {decision}")
+
+    def write_job_summary(self, markdown: str) -> None:
+        out_file = _REPO_ROOT / "pace-summary.md"
+        out_file.write_text(markdown)
+        print(f"[Bitbucket] Job summary written to: {out_file}")
+
+    # ------------------------------------------------------------------
+    # CI/CD variable management — Bitbucket repository variables
+    # ------------------------------------------------------------------
+
+    def set_variable(self, name: str, value: str) -> bool:
+        if not self._available:
+            return False
+        try:
+            list_url = (
+                f"{_BB_API}/repositories/{self._workspace}/{self._repo_slug}"
+                f"/pipelines_config/variables/"
+            )
+            resp = _requests.get(list_url, headers=self._headers(), timeout=15)
+            resp.raise_for_status()
+            existing = {v["key"]: v["uuid"] for v in resp.json().get("values", [])}
+
+            if name in existing:
+                patch_url = f"{list_url}{existing[name]}"
+                resp2 = _requests.put(
+                    patch_url,
+                    headers=self._headers(),
+                    json={"key": name, "value": value, "secured": False},
+                    timeout=15,
+                )
+                resp2.raise_for_status()
+                print(f"[Bitbucket] Variable {name} updated.")
+            else:
+                resp2 = _requests.post(
+                    list_url,
+                    headers=self._headers(),
+                    json={"key": name, "value": value, "secured": False},
+                    timeout=15,
+                )
+                resp2.raise_for_status()
+                print(f"[Bitbucket] Variable {name} created.")
+            return True
+        except Exception as e:
+            print(f"[Bitbucket] set_variable error: {e}")
+            return False
+
+
+class BitbucketTrackerAdapter(_BitbucketBase, TrackerAdapter):
+    """Bitbucket Issues tracker adapter.
+
+    Note: Bitbucket Issues must be enabled in the repository settings.
+    Issues is a basic tracker — no sprints or epics. For sprint tracking,
+    use Jira (platform.tracker: jira) alongside Bitbucket CI.
+    """
 
     # ------------------------------------------------------------------
     # Escalation issue
@@ -141,7 +272,7 @@ Merge this PR. The PACE loop resumes on the next scheduled run.
 
     def open_escalation_issue(self, day: int, day_dir: Path, hold_reason: str = "") -> str:
         if not self._available:
-            print("[Bitbucket] Adapter not configured — skipping issue creation.")
+            print("[Bitbucket] Adapter not configured — skipping escalation issue.")
             return ""
 
         story_text = (day_dir / "story.md").read_text() if (day_dir / "story.md").exists() else "Not available"
@@ -157,137 +288,57 @@ Merge this PR. The PACE loop resumes on the next scheduled run.
         if not hold_reason:
             hold_reason = "Unknown — see agent reports below"
 
-        content = f"""PACE could not resolve this HOLD after 2 retries. Human intervention required.
+        content = f"""Escalated HOLD — Day {day}
 
-**Blocker:** {hold_reason}
+PACE could not resolve this HOLD after 2 retries. Human intervention required.
+
+Blocker: {hold_reason}
 
 ---
 
-### Story Card
-
-```
+Story Card:
 {story_text}
-```
 
-### FORGE Handoff (last attempt)
-
-```
+FORGE Handoff (last attempt):
 {handoff_text}
-```
 
-### GATE Report (last attempt)
-
-```
+GATE Report (last attempt):
 {gate_text}
-```
 
 ---
 
-### To Resume
-
+To Resume:
 1. Resolve the blocker described above
 2. Close this issue
-3. In your pipeline configuration, set `PACE_PAUSED` to `false`
+3. Set PACE_PAUSED repository variable to false
 4. The PACE loop will re-run Day {day} on the next scheduled trigger
 
-> **Note:** `PACE_PAUSED` was automatically set to `true` when this issue was opened to prevent the pipeline from retrying indefinitely.
+Note: PACE_PAUSED was automatically set to true when this issue was opened.
 
-*Generated by PACE Orchestrator*"""
+Generated by PACE Orchestrator"""
 
         try:
-            issue = self._post("/issues", {
-                "title": f"PACE Day {day} — Escalated HOLD: {hold_reason[:80]}",
-                "content": {"raw": content},
-                "kind": "bug",
-                "priority": "critical",
-            })
-            url = issue.get("links", {}).get("html", {}).get("href", "")
+            resp = _requests.post(
+                self._repo_url("issues"),
+                headers=self._headers(),
+                json={
+                    "title": f"[PACE HOLD] Day {day} — {hold_reason[:80]}",
+                    "content": {"raw": content},
+                    "kind": "bug",
+                    "priority": "critical",
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            url = resp.json().get("links", {}).get("html", {}).get("href", "")
             print(f"[Bitbucket] Escalation issue opened: {url}")
             return url
         except Exception as e:
-            print(f"[Bitbucket] Failed to open issue: {e}")
+            print(f"[Bitbucket] Failed to open escalation issue: {e}")
             return ""
 
     # ------------------------------------------------------------------
-    # CI polling — Bitbucket Pipelines
-    # ------------------------------------------------------------------
-
-    def wait_for_commit_ci(
-        self,
-        sha: str,
-        timeout_minutes: int = 15,
-        poll_interval: int = 20,
-    ) -> dict:
-        if not self._available or not sha:
-            return {"conclusion": "no_runs", "url": "", "name": "", "sha": sha or ""}
-
-        deadline = time.time() + timeout_minutes * 60
-        print(f"[Bitbucket] Waiting for pipeline on {sha[:8]} (timeout: {timeout_minutes}m)...")
-
-        # Bitbucket pipeline states that are terminal
-        TERMINAL_STATES = {"COMPLETED", "STOPPED", "FAILED", "ERROR"}
-
-        while time.time() < deadline:
-            try:
-                data = self._get(
-                    "/pipelines/",
-                    params={"target.commit.hash": sha, "sort": "-created_on", "pagelen": 5},
-                )
-            except Exception as e:
-                print(f"[Bitbucket] API error while polling pipeline: {e}")
-                time.sleep(poll_interval)
-                continue
-
-            pipelines = data.get("values", [])
-            if not pipelines:
-                print(f"[Bitbucket] No pipeline for {sha[:8]} yet, waiting...")
-                time.sleep(poll_interval)
-                continue
-
-            # Use the most recently created pipeline
-            pipeline = pipelines[0]
-            state = pipeline.get("state", {})
-            state_name = state.get("name", "")
-            result = state.get("result", {}).get("name", "")
-
-            if state_name not in TERMINAL_STATES and state_name != "COMPLETED":
-                print(f"[Bitbucket] Pipeline #{pipeline.get('build_number')} state: {state_name}, waiting...")
-                time.sleep(poll_interval)
-                continue
-
-            conclusion = _map_bitbucket_result(result or state_name)
-            build_num = pipeline.get("build_number", "?")
-            repo_path = f"{self._workspace}/{self._repo_slug}"
-            url = f"https://bitbucket.org/{repo_path}/pipelines/results/{build_num}"
-            print(f"[Bitbucket] Pipeline #{build_num} complete — {result or state_name}")
-            return {
-                "conclusion": conclusion,
-                "url": url,
-                "name": f"pipeline #{build_num}",
-                "sha": sha,
-            }
-
-        print(f"[Bitbucket] Pipeline wait timed out after {timeout_minutes}m for {sha[:8]}")
-        return {"conclusion": "timeout", "url": "", "name": "", "sha": sha}
-
-    # ------------------------------------------------------------------
-    # Summary / reporting
-    # ------------------------------------------------------------------
-
-    def post_daily_summary(self, day: int, gate_report: dict) -> None:
-        decision = gate_report.get("gate_decision", "UNKNOWN")
-        icon = "✅" if decision == "SHIP" else "🔴"
-        print(f"[Bitbucket] Day {day} summary: {icon} {decision}")
-
-    def write_job_summary(self, markdown: str) -> None:
-        # Bitbucket Pipelines has no native job summary UI.
-        # Write to a workspace file; archive as an artifact in bitbucket-pipelines.yml if needed.
-        out_file = _REPO_ROOT / "pace-summary.md"
-        out_file.write_text(markdown)
-        print(f"[Bitbucket] Job summary written to: {out_file}")
-
-    # ------------------------------------------------------------------
-    # Advisory findings — Bitbucket Issue per backlisted batch
+    # Advisory findings
     # ------------------------------------------------------------------
 
     def push_advisory_items(self, day: int, items: list[dict], agent: str) -> str:
@@ -302,49 +353,41 @@ Merge this PR. The PACE loop resumes on the next scheduled run.
             for item in items
         )
 
-        content = f"""{agent} raised {len(items)} advisory finding(s) on Day {day} that were not resolved after one retry. These are non-blocking but must be cleared on the next clearance day.
+        content = f"""PACE Advisory — {agent} Day {day}
 
-### Findings
+{agent} raised {len(items)} advisory finding(s) on Day {day} that were not resolved after one retry.
 
+Findings:
 {finding_lines}
 
 ---
 
-### Resolution
-
+Resolution:
 1. Address each finding before the next clearance day
-2. On a clearance day, SENTINEL/CONDUIT will verify and close resolved items
+2. On a clearance day, SENTINEL/CONDUIT will verify and clear resolved items
 3. Unresolved items on a clearance day become blockers (HOLD)
 
-*Generated by PACE Orchestrator — Day {day}*"""
+Generated by PACE Orchestrator — Day {day}"""
 
         try:
-            issue = self._post("/issues", {
-                "title": f"PACE Advisory [{agent}] Day {day} — {len(items)} finding(s)",
-                "content": {"raw": content},
-                "kind": "enhancement",
-                "priority": "major",
-            })
-            url = issue.get("links", {}).get("html", {}).get("href", "")
+            resp = _requests.post(
+                self._repo_url("issues"),
+                headers=self._headers(),
+                json={
+                    "title": f"[PACE Advisory] {agent} Day {day} — {len(items)} finding(s)",
+                    "content": {"raw": content},
+                    "kind": "task",
+                    "priority": "major",
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            url = resp.json().get("links", {}).get("html", {}).get("href", "")
             print(f"[Bitbucket] Advisory issue opened: {url}")
             return url
         except Exception as e:
             print(f"[Bitbucket] Failed to open advisory issue: {e}")
             return ""
-
-    # ------------------------------------------------------------------
-    # CI/CD variable management
-    # ------------------------------------------------------------------
-
-    def set_variable(self, name: str, value: str) -> bool:
-        """Bitbucket Cloud does not expose a REST endpoint to update pipeline
-        variables mid-run. Log the intent and return False (non-fatal)."""
-        print(
-            f"[Bitbucket] set_variable({name!r}) — Bitbucket Cloud does not support "
-            f"updating pipeline variables at runtime. Set {name}={value!r} manually in "
-            f"Repository settings → Pipelines → Repository variables."
-        )
-        return False
 
 
 # ------------------------------------------------------------------
@@ -352,11 +395,11 @@ Merge this PR. The PACE loop resumes on the next scheduled run.
 # ------------------------------------------------------------------
 
 def _map_bitbucket_result(result: str) -> str:
+    """Map Bitbucket pipeline result to a PACE CI conclusion string."""
     mapping = {
         "SUCCESSFUL": "success",
         "FAILED": "failure",
         "ERROR": "failure",
         "STOPPED": "cancelled",
-        "COMPLETED": "success",
     }
     return mapping.get(result.upper(), "failure")

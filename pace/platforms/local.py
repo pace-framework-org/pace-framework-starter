@@ -1,12 +1,16 @@
-"""PACE Local Platform Adapter.
+"""PACE Local Platform Adapters.
 
-No-network adapter for running PACE locally without any CI/CD platform.
+No-network adapters for running PACE locally without any CI/CD platform.
 
+LocalCIAdapter:
 - open_review_pr      → writes PR body to .pace/day-N/review-pr.md and prints the path
-- open_escalation_issue → writes issue body to .pace/day-N/escalation-issue.md
 - wait_for_commit_ci  → returns immediately with conclusion="no_runs" (no CI to poll)
 - post_daily_summary  → prints to stdout
 - write_job_summary   → writes to pace-summary.md in the repo root
+
+LocalTrackerAdapter:
+- open_escalation_issue → writes issue body to .pace/day-N/escalation-issue.md
+- push_advisory_items   → writes advisory body to .pace/advisory-dayN-agent.md
 
 No environment variables required.
 """
@@ -17,13 +21,13 @@ import json
 import yaml
 from pathlib import Path
 
-from platforms.base import PlatformAdapter
+from platforms.base import CIAdapter, TrackerAdapter
 
 # Repo root is two levels up from this file (pace/platforms/ → pace/ → repo root)
 _REPO_ROOT = Path(__file__).parent.parent.parent
 
 
-class LocalAdapter(PlatformAdapter):
+class LocalCIAdapter(CIAdapter):
 
     # ------------------------------------------------------------------
     # Review PR (written to a local file)
@@ -83,6 +87,53 @@ with `PACE_DAY={day + 1}` to proceed.
         out_file.write_text(body)
         print(f"[Local] Review gate written to: {out_file}")
         return str(out_file)
+
+    # ------------------------------------------------------------------
+    # CI polling — no-op (no CI in local mode)
+    # ------------------------------------------------------------------
+
+    def wait_for_commit_ci(
+        self,
+        sha: str,
+        timeout_minutes: int = 15,
+        poll_interval: int = 20,
+    ) -> dict:
+        print(f"[Local] CI polling skipped (local mode) for commit {sha[:8] if sha else 'unknown'}.")
+        return {"conclusion": "no_runs", "url": "", "name": "", "sha": sha or ""}
+
+    # ------------------------------------------------------------------
+    # Summary / reporting
+    # ------------------------------------------------------------------
+
+    def post_daily_summary(self, day: int, gate_report: dict) -> None:
+        decision = gate_report.get("gate_decision", "UNKNOWN")
+        icon = "✅" if decision == "SHIP" else "🔴"
+        print(f"[Local] Day {day} summary: {icon} {decision}")
+
+    def write_job_summary(self, markdown: str) -> None:
+        out_file = _REPO_ROOT / "pace-summary.md"
+        out_file.write_text(markdown)
+        print(f"[Local] Job summary written to: {out_file}")
+
+    # ------------------------------------------------------------------
+    # CI/CD variable management
+    # ------------------------------------------------------------------
+
+    def set_variable(self, name: str, value: str) -> bool:
+        """Persist a named variable to .pace/variables.json for local mode."""
+        variables_file = _REPO_ROOT / ".pace" / "variables.json"
+        variables_file.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            existing: dict = json.loads(variables_file.read_text()) if variables_file.exists() else {}
+        except (json.JSONDecodeError, OSError):
+            existing = {}
+        existing[name] = value
+        variables_file.write_text(json.dumps(existing, indent=2))
+        print(f"[Local] Variable {name} set to {value!r} in {variables_file}")
+        return True
+
+
+class LocalTrackerAdapter(TrackerAdapter):
 
     # ------------------------------------------------------------------
     # Escalation issue (written to a local file)
@@ -147,33 +198,6 @@ PACE could not resolve this HOLD after 2 retries. Human intervention required.
         return str(out_file)
 
     # ------------------------------------------------------------------
-    # CI polling — no-op (no CI in local mode)
-    # ------------------------------------------------------------------
-
-    def wait_for_commit_ci(
-        self,
-        sha: str,
-        timeout_minutes: int = 15,
-        poll_interval: int = 20,
-    ) -> dict:
-        print(f"[Local] CI polling skipped (local mode) for commit {sha[:8] if sha else 'unknown'}.")
-        return {"conclusion": "no_runs", "url": "", "name": "", "sha": sha or ""}
-
-    # ------------------------------------------------------------------
-    # Summary / reporting
-    # ------------------------------------------------------------------
-
-    def post_daily_summary(self, day: int, gate_report: dict) -> None:
-        decision = gate_report.get("gate_decision", "UNKNOWN")
-        icon = "✅" if decision == "SHIP" else "🔴"
-        print(f"[Local] Day {day} summary: {icon} {decision}")
-
-    def write_job_summary(self, markdown: str) -> None:
-        out_file = _REPO_ROOT / "pace-summary.md"
-        out_file.write_text(markdown)
-        print(f"[Local] Job summary written to: {out_file}")
-
-    # ------------------------------------------------------------------
     # Advisory findings — written to local file
     # ------------------------------------------------------------------
 
@@ -209,25 +233,3 @@ PACE could not resolve this HOLD after 2 retries. Human intervention required.
         out_file.write_text(body)
         print(f"[Local] Advisory written to: {out_file}")
         return str(out_file)
-
-    # ------------------------------------------------------------------
-    # CI/CD variable management
-    # ------------------------------------------------------------------
-
-    def set_variable(self, name: str, value: str) -> bool:
-        """Persist a named variable to .pace/variables.json for local mode.
-
-        This allows PACE_PAUSED and spend-tracking variables to survive between
-        local runs without a CI/CD platform. The file is read-only by convention —
-        the orchestrator reads PACE_PAUSED from the environment, not this file.
-        """
-        variables_file = _REPO_ROOT / ".pace" / "variables.json"
-        variables_file.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            existing: dict = json.loads(variables_file.read_text()) if variables_file.exists() else {}
-        except (json.JSONDecodeError, OSError):
-            existing = {}
-        existing[name] = value
-        variables_file.write_text(json.dumps(existing, indent=2))
-        print(f"[Local] Variable {name} set to {value!r} in {variables_file}")
-        return True

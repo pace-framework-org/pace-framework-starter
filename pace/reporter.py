@@ -94,11 +94,11 @@ def write_job_summary(
     sentinel_report: dict | None = None,
     conduit_report: dict | None = None,
     abort_reason: str = "",
-    platform=None,
+    ci=None,
 ) -> None:
-    """Build the job summary markdown and deliver it via the platform adapter.
+    """Build the job summary markdown and deliver it via the CI adapter.
 
-    If platform is None, falls back to writing $GITHUB_STEP_SUMMARY directly
+    If ci is None, falls back to writing $GITHUB_STEP_SUMMARY directly
     (backward-compatible with GitHub Actions without an adapter).
     """
 
@@ -222,8 +222,8 @@ def write_job_summary(
 
     markdown = "\n".join(lines)
 
-    if platform is not None:
-        platform.write_job_summary(markdown)
+    if ci is not None:
+        ci.write_job_summary(markdown)
         return
 
     # Fallback: write directly to $GITHUB_STEP_SUMMARY (no adapter configured)

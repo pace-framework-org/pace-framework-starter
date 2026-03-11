@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from platforms.base import PlatformAdapter
+    from platforms.base import CIAdapter, TrackerAdapter
 
 # Add the pace directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -45,8 +45,8 @@ from advisory import (
     format_backlog_for_forge,
 )
 from config import load_config
-from platforms import get_platform_adapter
-from platforms.base import PlatformAdapter
+from platforms import get_ci_adapter, get_tracker_adapter
+from platforms.base import CIAdapter, TrackerAdapter
 from reporter import write_job_summary, update_progress_md
 import spend_tracker
 
@@ -62,12 +62,12 @@ class CycleAbortError(Exception):
     Unlike a HOLD, this does not trigger a platform escalation issue."""
 
 
-def _update_daily_spend(run_cost_usd: float, platform: "PlatformAdapter | None" = None) -> None:
-    """Accumulate this run's cost into PACE_DAILY_SPEND via the platform adapter.
+def _update_daily_spend(run_cost_usd: float, ci: "CIAdapter | None" = None) -> None:
+    """Accumulate this run's cost into PACE_DAILY_SPEND via the CI adapter.
 
     PACE_SPEND_TODAY is injected by pace.yml's budget-check step and holds the
     accumulated spend from earlier runs today (reset to 0 on a new calendar day).
-    Delegates to platform.set_variable() — each adapter handles persistence
+    Delegates to ci.set_variable() — each adapter handles persistence
     appropriately (GitHub writes to Actions variables; others may no-op).
     """
     from datetime import datetime
@@ -76,9 +76,9 @@ def _update_daily_spend(run_cost_usd: float, platform: "PlatformAdapter | None" 
     today = datetime.now(tz).date().isoformat()
     prior = float(os.environ.get("PACE_SPEND_TODAY", "0") or "0")
     new_total = prior + run_cost_usd
-    if platform is not None:
-        platform.set_variable("PACE_DAILY_SPEND", f"{new_total:.4f}")
-        platform.set_variable("PACE_DAILY_SPEND_DATE", today)
+    if ci is not None:
+        ci.set_variable("PACE_DAILY_SPEND", f"{new_total:.4f}")
+        ci.set_variable("PACE_DAILY_SPEND_DATE", today)
     print(f"[PACE] Daily spend updated: ${new_total:.4f} (this run: ${run_cost_usd:.4f})")
 
 
@@ -153,7 +153,7 @@ def commit_artifact(path: Path, message: str) -> None:
     )
 
 
-def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: PlatformAdapter) -> tuple[bool, str]:
+def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, tracker: TrackerAdapter) -> tuple[bool, str]:
     day_dir = PACE_DIR / f"day-{day}"
     day_dir.mkdir(parents=True, exist_ok=True)
 
@@ -264,7 +264,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
         ci_result: dict | None = None
         if commit_sha:
             print(f"[PACE] Day {day}: Waiting for CI on commit {commit_sha}...")
-            ci_result = platform.wait_for_commit_ci(commit_sha)
+            ci_result = ci.wait_for_commit_ci(commit_sha)
             print(f"[PACE] CI result: {ci_result['conclusion']}")
 
         # Step 3: GATE
@@ -333,7 +333,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
                     from advisory import load_open_backlog as _lob
                     all_items = _lob()
                     new_items = [i for i in all_items if i.get("day_raised") == day and i.get("agent") == "SENTINEL"]
-                    platform.push_advisory_items(day, new_items, "SENTINEL")
+                    tracker.push_advisory_items(day, new_items, "SENTINEL")
 
         if sentinel_decision == "SHIP" and is_clearance_day and sentinel_backlog:
             clear_advisory_items("SENTINEL")
@@ -382,7 +382,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
                     from advisory import load_open_backlog as _lob
                     all_items = _lob()
                     new_items = [i for i in all_items if i.get("day_raised") == day and i.get("agent") == "CONDUIT"]
-                    platform.push_advisory_items(day, new_items, "CONDUIT")
+                    tracker.push_advisory_items(day, new_items, "CONDUIT")
 
         if conduit_decision == "SHIP" and is_clearance_day and conduit_backlog:
             clear_advisory_items("CONDUIT")
@@ -398,7 +398,7 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], platform: Platf
                 return False, "Clearance day: advisory items still open after all agents ran"
 
         # All checks passed — SHIP
-        platform.post_daily_summary(day, gate_report)
+        ci.post_daily_summary(day, gate_report)
         print(f"[PACE] Day {day}: GATE + SENTINEL + CONDUIT — SHIP")
         return True, ""
 
@@ -432,7 +432,7 @@ def _run_day_zero(plan: dict) -> None:
 
 def main() -> None:
     # Mutable container so the spend flush closure can reference platform after it's created.
-    _platform_ref: list["PlatformAdapter | None"] = [None]
+    _platform_ref: list["CIAdapter | None"] = [None]
 
     def _flush_spend() -> None:
         cost = spend_tracker.total_usd()
@@ -460,8 +460,9 @@ def main() -> None:
         print(f"[PACE] ERROR: {e}")
         sys.exit(1)
 
-    platform = get_platform_adapter()
-    _platform_ref[0] = platform
+    ci = get_ci_adapter()
+    tracker = get_tracker_adapter()
+    _platform_ref[0] = ci
 
     print(f"[PACE] === Day {day} — {day_plan['target']} ===")
 
@@ -469,22 +470,22 @@ def main() -> None:
     try:
         run_preflight(day)
     except RuntimeError as exc:
-        write_job_summary(day, "ABORT", None, None, None, None, abort_reason=str(exc), platform=platform)
+        write_job_summary(day, "ABORT", None, None, None, None, abort_reason=str(exc), ci=ci)
         print(f"[PACE] Day {day}: Preflight failed — {exc}")
         sys.exit(1)
 
     # Human gate day: open PR/MR and stop
     if day_plan.get("human_gate"):
         print(f"[PACE] Day {day}: Human review gate. Opening PR/MR...")
-        platform.open_review_pr(day, PACE_DIR)
+        ci.open_review_pr(day, PACE_DIR)
         print("[PACE] Review gate opened. Loop will pause until human approval.")
         sys.exit(0)
 
     recent_gates = get_recent_gate_reports(day)
     try:
-        shipped, _last_hold_reason = run_cycle(day, day_plan, recent_gates, platform)
+        shipped, _last_hold_reason = run_cycle(day, day_plan, recent_gates, ci, tracker)
     except CycleAbortError as exc:
-        write_job_summary(day, "ABORT", None, None, None, None, abort_reason=str(exc), platform=platform)
+        write_job_summary(day, "ABORT", None, None, None, None, abort_reason=str(exc), ci=ci)
         print(f"[PACE] Day {day}: Cycle aborted — {exc}")
         print("[PACE] Fix the issue above and re-run this day. No escalation issue opened.")
         sys.exit(1)
@@ -495,16 +496,16 @@ def main() -> None:
     if not shipped:
         print(f"[PACE] Day {day}: Pipeline exhausted retries — opening escalation issue...")
         (day_dir / "escalated").touch()
-        platform.open_escalation_issue(day, day_dir, hold_reason=_last_hold_reason)
-        platform.set_variable("PACE_PAUSED", "true")
-        write_job_summary(day, "HOLD", _load_story(day_dir), gate_report, sentinel_report, conduit_report, platform=platform)
+        tracker.open_escalation_issue(day, day_dir, hold_reason=_last_hold_reason)
+        ci.set_variable("PACE_PAUSED", "true")
+        write_job_summary(day, "HOLD", _load_story(day_dir), gate_report, sentinel_report, conduit_report, ci=ci)
         update_progress_md(day)
         commit_artifact(PROGRESS_FILE, f"Day {day}: PROGRESS.md update — HOLD/escalated")
         print("[PACE] Escalation issue opened and PACE_PAUSED set to true. Resolve the issue, then set PACE_PAUSED=false to resume.")
         sys.exit(1)
 
     story_card = _load_story(day_dir)
-    write_job_summary(day, "SHIP", story_card, gate_report, sentinel_report, conduit_report, platform=platform)
+    write_job_summary(day, "SHIP", story_card, gate_report, sentinel_report, conduit_report, ci=ci)
     update_progress_md(day)
     commit_artifact(PROGRESS_FILE, f"Day {day}: PROGRESS.md update — SHIP")
     print(f"[PACE] === Day {day} complete — SHIPPED ===")

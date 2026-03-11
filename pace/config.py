@@ -57,7 +57,8 @@ class PaceConfig:
     source_dirs: list[SourceDir]
     docs_dir: Path | None       # Absolute path to external docs folder, or None
     tech: TechConfig
-    platform_type: str          # "github" | "gitlab" | "bitbucket" | "jenkins" | "jira" | "local"
+    ci_type: str                # "github" | "gitlab" | "bitbucket" | "jenkins" | "local"
+    tracker_type: str           # "jira" | "github" | "gitlab" | "bitbucket" | "local"
     llm: LLMConfig
     cost_control: CostControlConfig  # Proactive story scoping thresholds
     advisory_push_to_issues: bool  # Whether to open issues for backlogged advisory findings
@@ -139,7 +140,8 @@ def load_config() -> PaceConfig:
         source_dirs=source_dirs,
         docs_dir=docs_dir,
         tech=tech,
-        platform_type=platform_raw.get("type", "github"),
+        ci_type=platform_raw.get("ci") or platform_raw.get("type", "github"),
+        tracker_type=platform_raw.get("tracker") or platform_raw.get("type", "github"),
         llm=llm,
         cost_control=cost_control,
         advisory_push_to_issues=bool(advisory_raw.get("push_to_issues", False)),
