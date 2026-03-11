@@ -158,73 +158,83 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
     day_dir = PACE_DIR / f"day-{day}"
     day_dir.mkdir(parents=True, exist_ok=True)
 
+    # Idempotency: if cycle.md exists the day already shipped — skip all LLM calls.
+    cycle_file = day_dir / "cycle.md"
+    if cycle_file.exists():
+        print(f"[PACE] Day {day}: Already shipped — skipping (cycle.md exists).")
+        return True, ""
+
     is_clearance_day = (day % 7 == 0)
-
-    # Step 1: PRIME
-    print(f"[PACE] Day {day}: Invoking PRIME...")
-    try:
-        story_card = run_prime(day, day_plan["target"], recent_gates)
-    except Exception as exc:
-        import traceback
-        print(f"[PACE] PRIME failed — cannot continue cycle:\n{traceback.format_exc()}")
-        raise CycleAbortError(str(exc)) from exc
-    story_file = day_dir / "story.md"
-    story_file.write_text(yaml.dump(story_card, default_flow_style=False, allow_unicode=True))
-    commit_artifact(story_file, f"Day {day}: PRIME story card")
-    print(f"[PACE] Story card written.")
-
-    # Step 1b: SCOPE — refine story if AC count or predicted cost exceeds thresholds
     cfg = load_config()
     cc = cfg.cost_control
-    for _refine_round in range(2):  # max 2 refinement rounds
-        ac_count = len(story_card.get("acceptance", []))
-        needs_refine = False
-        refine_reason = ""
 
-        if cc.max_story_ac > 0 and ac_count > cc.max_story_ac:
-            refine_reason = f"Story has {ac_count} acceptance criteria (max {cc.max_story_ac})."
-            needs_refine = True
-
-        if not needs_refine and cc.max_story_cost_usd > 0:
-            scope = _scope_check(story_card, cfg.llm.analysis_model)
-            predicted = float(scope.get("predicted_cost_usd") or 0)
-            if predicted > cc.max_story_cost_usd:
-                refine_reason = (
-                    f"SCOPE predicts ${predicted:.2f} (max ${cc.max_story_cost_usd:.2f}). "
-                    f"{scope.get('reasoning', '')}"
-                )
-                needs_refine = True
-            if scope:
-                print(
-                    f"[PACE] SCOPE: ~{scope.get('predicted_iterations')} iterations, "
-                    f"~${predicted:.2f} predicted."
-                )
-
-        if not needs_refine:
-            break
-
-        print(f"[PACE] Day {day}: Refining story — {refine_reason}")
+    # Step 1: PRIME — re-use story.md if it exists from a prior attempt on the same day.
+    story_file = day_dir / "story.md"
+    if story_file.exists():
+        print(f"[PACE] Day {day}: Re-using existing PRIME story card (story.md).")
+        story_card = yaml.safe_load(story_file.read_text())
+    else:
+        print(f"[PACE] Day {day}: Invoking PRIME...")
         try:
-            story_card, deferred = run_prime_refine(day, story_card, refine_reason, cc.max_story_ac)
+            story_card = run_prime(day, day_plan["target"], recent_gates)
         except Exception as exc:
-            print(f"[PACE] PRIME refinement failed (non-fatal, proceeding as-is): {exc}")
-            break
-
-        if deferred:
-            deferred_file = day_dir / "deferred_scope.yaml"
-            deferred_file.write_text(yaml.dump({"deferred": deferred}, allow_unicode=True))
-            commit_artifact(
-                deferred_file,
-                f"Day {day}: deferred scope — {len(deferred)} criteria deferred to next day",
-            )
-            print(f"[PACE] Day {day}: {len(deferred)} criteria deferred to next day.")
-
+            import traceback
+            print(f"[PACE] PRIME failed — cannot continue cycle:\n{traceback.format_exc()}")
+            raise CycleAbortError(str(exc)) from exc
         story_file.write_text(yaml.dump(story_card, default_flow_style=False, allow_unicode=True))
-        commit_artifact(
-            story_file,
-            f"Day {day}: PRIME story card (refined — {len(story_card.get('acceptance', []))} AC)",
-        )
-        print(f"[PACE] Day {day}: Story refined to {len(story_card.get('acceptance', []))} AC.")
+        commit_artifact(story_file, f"Day {day}: PRIME story card")
+        print(f"[PACE] Story card written.")
+
+        # Step 1b: SCOPE — refine story if AC count or predicted cost exceeds thresholds
+        for _refine_round in range(2):  # max 2 refinement rounds
+            ac_count = len(story_card.get("acceptance", []))
+            needs_refine = False
+            refine_reason = ""
+
+            if cc.max_story_ac > 0 and ac_count > cc.max_story_ac:
+                refine_reason = f"Story has {ac_count} acceptance criteria (max {cc.max_story_ac})."
+                needs_refine = True
+
+            if not needs_refine and cc.max_story_cost_usd > 0:
+                scope = _scope_check(story_card, cfg.llm.analysis_model)
+                predicted = float(scope.get("predicted_cost_usd") or 0)
+                if predicted > cc.max_story_cost_usd:
+                    refine_reason = (
+                        f"SCOPE predicts ${predicted:.2f} (max ${cc.max_story_cost_usd:.2f}). "
+                        f"{scope.get('reasoning', '')}"
+                    )
+                    needs_refine = True
+                if scope:
+                    print(
+                        f"[PACE] SCOPE: ~{scope.get('predicted_iterations')} iterations, "
+                        f"~${predicted:.2f} predicted."
+                    )
+
+            if not needs_refine:
+                break
+
+            print(f"[PACE] Day {day}: Refining story — {refine_reason}")
+            try:
+                story_card, deferred = run_prime_refine(day, story_card, refine_reason, cc.max_story_ac)
+            except Exception as exc:
+                print(f"[PACE] PRIME refinement failed (non-fatal, proceeding as-is): {exc}")
+                break
+
+            if deferred:
+                deferred_file = day_dir / "deferred_scope.yaml"
+                deferred_file.write_text(yaml.dump({"deferred": deferred}, allow_unicode=True))
+                commit_artifact(
+                    deferred_file,
+                    f"Day {day}: deferred scope — {len(deferred)} criteria deferred to next day",
+                )
+                print(f"[PACE] Day {day}: {len(deferred)} criteria deferred to next day.")
+
+            story_file.write_text(yaml.dump(story_card, default_flow_style=False, allow_unicode=True))
+            commit_artifact(
+                story_file,
+                f"Day {day}: PRIME story card (refined — {len(story_card.get('acceptance', []))} AC)",
+            )
+            print(f"[PACE] Day {day}: Story refined to {len(story_card.get('acceptance', []))} AC.")
 
     open_backlog = load_open_backlog() if is_clearance_day else []
     if is_clearance_day and open_backlog:
