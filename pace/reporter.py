@@ -50,6 +50,21 @@ def _load_forge_cost(day: int) -> float | None:
     return float(cost) if cost is not None else None
 
 
+def _load_cycle_cost(day: int) -> float | None:
+    """Return total pipeline cost for a day (PRIME+FORGE+GATE+SENTINEL+CONDUIT).
+
+    Reads cycle.md written since v1.2.0. Falls back to forge_cost_usd for
+    pre-v1.2.0 artifacts so old sprints render correctly.
+    """
+    cycle_file = PACE_DIR / f"day-{day}" / "cycle.md"
+    if cycle_file.exists():
+        data = yaml.safe_load(cycle_file.read_text()) or {}
+        cost = data.get("cycle_cost_usd")
+        if cost is not None:
+            return float(cost)
+    return _load_forge_cost(day)
+
+
 def _load_day_artifacts(day: int) -> tuple[dict | None, dict | None, dict | None]:
     """Return (story_card, handoff, gate_report) for a given day, or None if missing."""
     day_dir = PACE_DIR / f"day-{day}"
@@ -256,7 +271,7 @@ def update_progress_md(current_day: int) -> None:
         story, handoff, gate = _load_day_artifacts(day)
 
         est_cost = estimates.get(day, {}).get("predicted_cost_usd")
-        actual_cost = _load_forge_cost(day)
+        actual_cost = _load_cycle_cost(day)
 
         if gate is None and day > current_day:
             rows.append((day, day_plan.get("target", "")[:60], "PENDING", "", est_cost, None))
@@ -306,7 +321,7 @@ def update_progress_md(current_day: int) -> None:
 
     if has_costs:
         lines += [
-            "| Day | Story | Decision | Est. Cost | Actual Cost | Notes |",
+            "| Day | Story | Decision | Est. Cost | Actual Cost (pipeline) | Notes |",
             "| --- | --- | --- | --- | --- | --- |",
         ]
         # Day 0 planning row
@@ -358,7 +373,9 @@ def update_progress_md(current_day: int) -> None:
     if has_costs:
         total_estimated = planner_report.get("total_estimated_usd", 0.0)
         planning_cost = planner_report.get("planning_cost_usd", 0.0)
-        total_actual = sum(_load_forge_cost(d) or 0.0 for d in range(1, total_days + 1))
+        # Use full pipeline cost (cycle_cost_usd) for totals; falls back to forge_cost_usd
+        total_actual = sum(_load_cycle_cost(d) or 0.0 for d in range(1, total_days + 1))
+        forge_only_total = sum(_load_forge_cost(d) or 0.0 for d in range(1, total_days + 1))
         variance = total_actual - total_estimated
         variance_str = (f"+${variance:.2f}" if variance >= 0 else f"-${abs(variance):.2f}")
         variance_pct = f" ({variance / total_estimated * 100:+.0f}%)" if total_estimated > 0 else ""
@@ -370,7 +387,8 @@ def update_progress_md(current_day: int) -> None:
             "| Metric | Value |",
             "| --- | --- |",
             f"| Total estimated (Days 1–{total_days}) | ${total_estimated:.2f} |",
-            f"| Total actual (FORGE runs) | ${total_actual:.2f} |",
+            f"| Total actual (full pipeline) | ${total_actual:.2f} |",
+            f"| Total actual (FORGE only) | ${forge_only_total:.2f} |",
             f"| Variance | {variance_str}{variance_pct} |",
             f"| Day 0 planning cost | ${planning_cost:.4f} |",
             "",

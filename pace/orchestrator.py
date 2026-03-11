@@ -23,6 +23,7 @@ import shlex
 import sys
 import yaml
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -233,6 +234,8 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
     advisory_attempt: dict[str, bool] = {"SENTINEL": False, "CONDUIT": False}
     hold_reason: str | None = None
 
+    _cycle_cost_before = spend_tracker.total_usd()  # captures full pipeline cost for this day
+
     for attempt in range(1, MAX_RETRIES + 2):
         # Step 2: FORGE
         forge_hold = hold_reason
@@ -397,30 +400,49 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
                 print(f"[PACE] Day {day}: Clearance day FAILED — {len(remaining)} advisory item(s) still open.")
                 return False, "Clearance day: advisory items still open after all agents ran"
 
-        # All checks passed — SHIP
+        # All checks passed — write cycle cost artifact and SHIP
+        cycle_cost_usd = round(spend_tracker.total_usd() - _cycle_cost_before, 4)
+        cycle_file = day_dir / "cycle.md"
+        cycle_file.write_text(yaml.dump({
+            "day": day,
+            "cycle_cost_usd": cycle_cost_usd,
+            "forge_cost_usd": handoff.get("forge_cost_usd", 0.0),
+            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }, default_flow_style=False))
+        commit_artifact(cycle_file, f"Day {day}: cycle cost record")
         ci.post_daily_summary(day, gate_report)
-        print(f"[PACE] Day {day}: GATE + SENTINEL + CONDUIT — SHIP")
+        print(f"[PACE] Day {day}: GATE + SENTINEL + CONDUIT — SHIP (cycle cost: ${cycle_cost_usd:.4f})")
         return True, ""
 
     return False, hold_reason or "Unknown — retries exhausted"
 
 
-def _run_day_zero(plan: dict) -> None:
-    """Day 0 planning phase — estimate sprint cost and pre-populate PROGRESS.md."""
+def _run_day_zero(plan: dict, replan: bool = False) -> None:
+    """Day 0 planning phase — estimate sprint cost and pre-populate PROGRESS.md.
+
+    Args:
+        plan: Parsed plan.yaml dict.
+        replan: When True (PACE_REPLAN=true), re-estimates only remaining days
+                while preserving actuals for completed days.
+    """
     from planner import run_planner
 
     cfg = load_config()
-    print("[PACE] === Day 0 — Sprint Planning & Cost Estimation ===")
+    mode = "Re-planning" if replan else "Sprint Planning & Cost Estimation"
+    print(f"[PACE] === Day 0 — {mode} ===")
+    if replan:
+        print("[PACE] Re-plan mode: completed day actuals will be preserved.")
 
     _plan_cost_before = spend_tracker.total_usd()
-    report = run_planner(plan, cfg.llm.analysis_model)
+    report = run_planner(plan, cfg.llm.model, replan=replan)
     planning_cost = round(spend_tracker.total_usd() - _plan_cost_before, 4)
 
     # Write final planning cost back to the report
     planner_file = PACE_DIR / "day-0" / "planner.md"
     report["planning_cost_usd"] = planning_cost
     planner_file.write_text(yaml.dump(report, default_flow_style=False, allow_unicode=True))
-    commit_artifact(planner_file, "Day 0: Sprint plan with cost estimates")
+    commit_msg = "Day 0: Sprint plan re-estimated with actuals" if replan else "Day 0: Sprint plan with cost estimates"
+    commit_artifact(planner_file, commit_msg)
 
     print(f"[PACE] Day 0 planning cost: ${planning_cost:.4f}")
 
@@ -450,8 +472,10 @@ def main() -> None:
     plan = load_plan()
 
     # Day 0 is the planning phase — run cost estimation for all sprint days.
+    # Set PACE_REPLAN=true to refresh estimates for remaining days while preserving actuals.
     if day == 0:
-        _run_day_zero(plan)
+        replan = os.environ.get("PACE_REPLAN", "").lower() == "true"
+        _run_day_zero(plan, replan=replan)
         sys.exit(0)
 
     try:
