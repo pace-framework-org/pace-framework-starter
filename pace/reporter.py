@@ -50,6 +50,28 @@ def _load_forge_cost(day: int) -> float | None:
     return float(cost) if cost is not None else None
 
 
+def _load_attempts(day: int) -> list[dict]:
+    """Return all run-attempt records for a day from attempts.yaml, or []."""
+    f = PACE_DIR / f"day-{day}" / "attempts.yaml"
+    if not f.exists():
+        return []
+    return yaml.safe_load(f.read_text()) or []
+
+
+def _load_total_cost(day: int) -> tuple[float | None, int]:
+    """Return (total_cost_usd_across_all_runs, run_count).
+
+    When attempts.yaml exists, sums every run (including failed retries).
+    Falls back to cycle.md / handoff.md for days before this feature.
+    """
+    attempts = _load_attempts(day)
+    if attempts:
+        total = round(sum(float(a.get("cost_usd", 0.0)) for a in attempts), 4)
+        return total, len(attempts)
+    cost = _load_cycle_cost(day)
+    return cost, (1 if cost is not None else 0)
+
+
 def _load_cycle_cost(day: int) -> float | None:
     """Return total pipeline cost for a day (PRIME+FORGE+GATE+SENTINEL+CONDUIT).
 
@@ -271,14 +293,14 @@ def update_progress_md(current_day: int) -> None:
         story, handoff, gate = _load_day_artifacts(day)
 
         est_cost = estimates.get(day, {}).get("predicted_cost_usd")
-        actual_cost = _load_cycle_cost(day)
+        actual_cost, run_count = _load_total_cost(day)
 
         if gate is None and day > current_day:
-            rows.append((day, day_plan.get("target", "")[:60], "PENDING", "", est_cost, None))
+            rows.append((day, day_plan.get("target", "")[:60], "PENDING", "", est_cost, None, 0))
             continue
 
         if gate is None and day <= current_day:
-            rows.append((day, day_plan.get("target", "")[:60], "IN PROGRESS", "", est_cost, actual_cost))
+            rows.append((day, day_plan.get("target", "")[:60], "IN PROGRESS", "", est_cost, actual_cost, run_count))
             continue
 
         decision = gate.get("gate_decision", "?")
@@ -293,7 +315,7 @@ def update_progress_md(current_day: int) -> None:
             shipped_count += 1
 
         notes = "; ".join(deferred) if deferred else ""
-        rows.append((day, day_plan.get("target", "")[:60], decision, notes[:80], est_cost, actual_cost))
+        rows.append((day, day_plan.get("target", "")[:60], decision, notes[:80], est_cost, actual_cost, run_count))
 
     ship_rate = f"{(shipped_count / current_day * 100):.0f}%" if current_day > 0 else "0%"
     open_advisories = len(load_open_backlog())
@@ -321,7 +343,7 @@ def update_progress_md(current_day: int) -> None:
 
     if has_costs:
         lines += [
-            "| Day | Story | Decision | Est. Cost | Actual Cost (pipeline) | Notes |",
+            "| Day | Story | Decision | Est. Cost | Actual Cost | Notes |",
             "| --- | --- | --- | --- | --- | --- |",
         ]
         # Day 0 planning row
@@ -334,11 +356,16 @@ def update_progress_md(current_day: int) -> None:
             "| --- | --- | --- | --- |",
         ]
 
-    for day, target, decision, notes, est_cost, actual_cost in rows:
+    for day, target, decision, notes, est_cost, actual_cost, run_count in rows:
         icon = RESULT_ICON.get(decision, "⏳")
         if has_costs:
             est_str = f"${est_cost:.2f}" if est_cost is not None else "—"
-            actual_str = f"${actual_cost:.2f}" if actual_cost is not None else "—"
+            if actual_cost is not None:
+                actual_str = f"${actual_cost:.2f}"
+                if run_count > 1:
+                    actual_str += f" ({run_count}×)"
+            else:
+                actual_str = "—"
             lines.append(f"| {day} | {target} | {icon} {decision} | {est_str} | {actual_str} | {notes} |")
         else:
             lines.append(f"| {day} | {target} | {icon} {decision} | {notes} |")
@@ -365,7 +392,7 @@ def update_progress_md(current_day: int) -> None:
         if week_total > 0:
             lines.append(f"**{week_shipped}/{week_total} days shipped**")
             lines.append("")
-        for day, target, decision, notes, est_cost, actual_cost in week_days:
+        for day, target, decision, notes, est_cost, actual_cost, run_count in week_days:
             icon = RESULT_ICON.get(decision, "⏳")
             lines.append(f"- Day {day}: {icon} {target}")
         lines.append("")
@@ -373,10 +400,13 @@ def update_progress_md(current_day: int) -> None:
     if has_costs:
         total_estimated = planner_report.get("total_estimated_usd", 0.0)
         planning_cost = planner_report.get("planning_cost_usd", 0.0)
-        # Use full pipeline cost (cycle_cost_usd) for totals; falls back to forge_cost_usd
-        total_actual = sum(_load_cycle_cost(d) or 0.0 for d in range(1, total_days + 1))
+        # Total across all runs (including retries) from attempts.yaml when available
+        total_with_retries = sum((_load_total_cost(d)[0] or 0.0) for d in range(1, total_days + 1))
+        # Successful pipeline cost only (cycle.md / handoff.md)
+        total_successful = sum(_load_cycle_cost(d) or 0.0 for d in range(1, total_days + 1))
+        wasted = round(total_with_retries - total_successful, 4)
         forge_only_total = sum(_load_forge_cost(d) or 0.0 for d in range(1, total_days + 1))
-        variance = total_actual - total_estimated
+        variance = total_successful - total_estimated
         variance_str = (f"+${variance:.2f}" if variance >= 0 else f"-${abs(variance):.2f}")
         variance_pct = f" ({variance / total_estimated * 100:+.0f}%)" if total_estimated > 0 else ""
         lines += [
@@ -387,9 +417,11 @@ def update_progress_md(current_day: int) -> None:
             "| Metric | Value |",
             "| --- | --- |",
             f"| Total estimated (Days 1–{total_days}) | ${total_estimated:.2f} |",
-            f"| Total actual (full pipeline) | ${total_actual:.2f} |",
+            f"| Total actual (successful runs) | ${total_successful:.2f} |",
+            f"| Total actual (incl. retries) | ${total_with_retries:.2f} |",
+            f"| Wasted on retries | ${wasted:.2f} |",
             f"| Total actual (FORGE only) | ${forge_only_total:.2f} |",
-            f"| Variance | {variance_str}{variance_pct} |",
+            f"| Variance (successful vs estimated) | {variance_str}{variance_pct} |",
             f"| Day 0 planning cost | ${planning_cost:.4f} |",
             "",
         ]

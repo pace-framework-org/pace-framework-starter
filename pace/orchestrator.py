@@ -51,6 +51,10 @@ from platforms.base import CIAdapter, TrackerAdapter
 from reporter import write_job_summary, update_progress_md
 import spend_tracker
 
+# Monkeypatch Anthropic SDK so forge.py's direct API calls are tracked.
+# The LLM adapter skips its own record() call when monkeypatched=True to prevent double-counting.
+spend_tracker.install()
+
 REPO_ROOT = Path(__file__).parent.parent
 PACE_DIR = REPO_ROOT / ".pace"
 PLAN_FILE = Path(__file__).parent / "plan.yaml"
@@ -61,6 +65,31 @@ MAX_RETRIES = 1
 class CycleAbortError(Exception):
     """Raised when a cycle cannot start due to an infrastructure failure (e.g. PRIME error).
     Unlike a HOLD, this does not trigger a platform escalation issue."""
+
+
+def _record_run_attempt(day: int, day_dir: Path, outcome: str, hold_reason: str) -> None:
+    """Append this GitHub Actions run's cost and outcome to .pace/day-N/attempts.yaml.
+
+    Called once per run (after run_cycle returns) so every retry is accounted for.
+    The cost is spend_tracker.total_usd() — the full LLM spend for this process.
+    """
+    attempts_file = day_dir / "attempts.yaml"
+    records: list[dict] = []
+    if attempts_file.exists():
+        records = yaml.safe_load(attempts_file.read_text()) or []
+        if not isinstance(records, list):
+            records = []
+    entry: dict = {
+        "run": len(records) + 1,
+        "date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "cost_usd": round(spend_tracker.total_usd(), 4),
+        "outcome": outcome,
+    }
+    if hold_reason:
+        entry["hold_reason"] = hold_reason[:120]
+    records.append(entry)
+    attempts_file.write_text(yaml.dump(records, default_flow_style=False, allow_unicode=True))
+    commit_artifact(attempts_file, f"Day {day}: attempt {len(records)} — {outcome} (${entry['cost_usd']:.4f})")
 
 
 def _update_daily_spend(run_cost_usd: float, ci: "CIAdapter | None" = None) -> None:
@@ -527,6 +556,7 @@ def main() -> None:
         sys.exit(1)
 
     day_dir = PACE_DIR / f"day-{day}"
+    _record_run_attempt(day, day_dir, "SHIP" if shipped else "HOLD", _last_hold_reason if not shipped else "")
     _, _, gate_report, sentinel_report, conduit_report = _load_artifacts_for_summary(day_dir)
 
     if not shipped:
