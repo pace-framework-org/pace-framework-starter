@@ -242,13 +242,28 @@ def _build_tools(tdd_enforcement: bool) -> list:
 
 def _dispatch_tool(name: str, inputs: dict) -> str:
     if name == "read_file":
-        return _tool_read_file(inputs["path"])
+        path = inputs.get("path")
+        if not path:
+            return "ERROR: read_file requires a 'path' argument."
+        return _tool_read_file(path)
     if name == "write_file":
-        return _tool_write_file(inputs["path"], inputs["content"])
+        path = inputs.get("path")
+        content = inputs.get("content")
+        if not path:
+            return "ERROR: write_file requires a 'path' argument."
+        if content is None:
+            return "ERROR: write_file requires a 'content' argument."
+        return _tool_write_file(path, content)
     if name == "run_bash":
-        return _tool_run_bash(inputs["command"])
+        command = inputs.get("command")
+        if not command:
+            return "ERROR: run_bash requires a 'command' argument."
+        return _tool_run_bash(command)
     if name == "git_commit":
-        return _tool_git_commit(inputs["message"])
+        message = inputs.get("message")
+        if not message:
+            return "ERROR: git_commit requires a 'message' argument."
+        return _tool_git_commit(message)
     return f"ERROR: Unknown tool: {name}"
 
 

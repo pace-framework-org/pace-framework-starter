@@ -164,6 +164,11 @@ Merge this PR to proceed to Day {day + 1}, or close it to pause the cycle.
                 runs = resp.json().get("check_runs", [])
             except Exception as e:
                 print(f"[GitHub] API error: {e}")
+                # 422 means the commit is unknown to the check-runs API (e.g. pushed
+                # to a branch that never triggered a CI workflow). Retrying won't help.
+                if hasattr(e, "response") and getattr(e.response, "status_code", None) == 422:
+                    print(f"[GitHub] 422 — no CI workflow associated with {sha[:8]}. Returning no_runs.")
+                    return {"conclusion": "no_runs", "url": "", "name": "", "sha": sha}
                 time.sleep(poll_interval)
                 continue
 
