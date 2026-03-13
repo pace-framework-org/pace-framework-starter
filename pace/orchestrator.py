@@ -529,6 +529,14 @@ def main() -> None:
     tracker = get_tracker_adapter()
     _platform_ref[0] = ci
 
+    # v2.0 Sprint/Release branching model: ensure branch hierarchy exists for this sprint day.
+    cfg_main = load_config()
+    if cfg_main.release:
+        from branching import get_branching_adapter, current_sprint_num
+        sprint_num = current_sprint_num(day, cfg_main.release.sprint_days)
+        print(f"[PACE] Ensuring branch hierarchy (release={cfg_main.release.name}, sprint={sprint_num})...")
+        get_branching_adapter().ensure_hierarchy(cfg_main.release.name, sprint_num)
+
     print(f"[PACE] === Day {day} — {day_plan['target']} ===")
 
     # Preflight: ensure context documents exist (runs SCRIBE if missing)
