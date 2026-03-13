@@ -64,6 +64,9 @@ jobs:
       #   run: npm ci
       # ---------------------------------------------------------------------------
 
+      - name: Validate PACE configuration
+        run: python pace/config_tester.py
+
       - name: Check daily budget
         id: budget_check
         env:
