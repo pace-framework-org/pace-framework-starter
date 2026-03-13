@@ -1,4 +1,4 @@
-"""PACE Planner — Day 0 sprint planning and cost estimation.
+"""PACE Planner — Day 0 sprint planning, cost estimation, and plan-approval pipeline.
 
 Runs before Day 1 begins. Estimates FORGE cost for every day in plan.yaml
 using the main LLM model (same model as FORGE) for accurate cost prediction,
@@ -7,9 +7,23 @@ fills in planning_cost_usd after the spend tracker finalises.
 
 Re-planning support: set PACE_REPLAN=true with PACE_DAY=0 to refresh estimates
 for remaining days while preserving actuals for completed days.
+
+Pipeline mode (--pipeline flag):
+    Runs as a standalone CI pipeline (pace-planner.yml). Collects shipped days,
+    re-estimates remaining work, writes .pace/shipped.yaml, and sets
+    PACE_PAUSED=true so the daily cycle waits for human plan approval.
+    The calling workflow commits the artifacts and opens the plan-approval PR.
+
+Usage:
+    python pace/planner.py                 # Day 0 planning (called by orchestrator)
+    python pace/planner.py --pipeline      # Pipeline mode (called by pace-planner.yml)
+    python pace/planner.py --pipeline --replan  # Force re-estimation of all days
 """
 
+import argparse
+import os
 import re
+import sys
 import yaml
 from datetime import datetime, timezone
 from pathlib import Path
@@ -191,3 +205,113 @@ def run_planner(plan: dict, model: str, replan: bool = False) -> dict:
     print(f"[PACE] Day 0: Total estimated sprint cost: ${total_estimated:.2f}")
 
     return report
+
+
+# ---------------------------------------------------------------------------
+# Shipped-days manifest (pace-planner pipeline)
+# ---------------------------------------------------------------------------
+
+def _collect_shipped_days() -> list[int]:
+    """Return sorted list of day numbers whose gate decision was SHIP."""
+    shipped: list[int] = []
+    for gate_file in sorted(PACE_DIR.glob("day-*/gate.md")):
+        try:
+            day_num = int(gate_file.parent.name.split("-")[1])
+            data = yaml.safe_load(gate_file.read_text()) or {}
+            if data.get("gate_decision") == "SHIP":
+                shipped.append(day_num)
+        except (ValueError, IndexError):
+            pass
+    return shipped
+
+
+def _write_shipped_manifest(shipped_days: list[int]) -> None:
+    """Write .pace/shipped.yaml so re-planner and orchestrator can read it."""
+    PACE_DIR.mkdir(parents=True, exist_ok=True)
+    content = {
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "shipped_days": shipped_days,
+    }
+    (PACE_DIR / "shipped.yaml").write_text(
+        yaml.dump(content, default_flow_style=False, allow_unicode=True)
+    )
+    print(f"[PACE] shipped.yaml written ({len(shipped_days)} shipped days: {shipped_days})")
+
+
+# ---------------------------------------------------------------------------
+# Pipeline entrypoint
+# ---------------------------------------------------------------------------
+
+def run_pipeline(plan: dict, model: str, force_replan: bool = False) -> None:
+    """Pipeline mode: re-estimate remaining work, protect shipped days, pause cycle.
+
+    Called by pace-planner.yml. After this function returns:
+      - .pace/day-0/planner.md   — updated cost estimates
+      - .pace/shipped.yaml       — protected shipped-day manifest
+      - PACE_PAUSED              — set to "true" (Actions variable)
+
+    The workflow YAML then commits these files to pace/plan-approval and opens
+    a plan-approval PR. Merging the PR is the human gate before the next sprint
+    day runs.
+    """
+    sys.path.insert(0, str(Path(__file__).parent))
+    from platforms import get_ci_adapter
+
+    shipped_days = _collect_shipped_days()
+    _write_shipped_manifest(shipped_days)
+
+    replan = force_replan or len(shipped_days) > 0
+    report = run_planner(plan, model, replan=replan)
+
+    # Pause the daily cycle so it waits for plan-approval PR to be merged
+    ci = get_ci_adapter()
+    paused = ci.set_variable("PACE_PAUSED", "true")
+    if paused:
+        print("[PACE] PACE_PAUSED set to true — daily cycle paused pending plan approval.")
+    else:
+        print("[PACE] Warning: could not set PACE_PAUSED (adapter unavailable). Set it manually.")
+
+    total = report.get("total_estimated_usd", 0.0)
+    print(
+        f"[PACE] Pipeline complete. "
+        f"Total re-estimated cost: ${total:.2f}. "
+        f"Commit .pace/day-0/planner.md and .pace/shipped.yaml, then open the plan-approval PR."
+    )
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="PACE Planner")
+    parser.add_argument(
+        "--pipeline",
+        action="store_true",
+        help="Run as a standalone CI pipeline (pace-planner.yml mode)",
+    )
+    parser.add_argument(
+        "--replan",
+        action="store_true",
+        help="Force re-estimation of all days even if no shipped days exist",
+    )
+    args = parser.parse_args()
+
+    plan_file = REPO_ROOT / "plan.yaml"
+    if not plan_file.exists():
+        print("[PACE] ERROR: plan.yaml not found at repo root.")
+        sys.exit(1)
+
+    plan_data = yaml.safe_load(plan_file.read_text()) or {}
+
+    sys.path.insert(0, str(Path(__file__).parent))
+    from config import load_config
+    cfg = load_config()
+    llm_model = cfg.llm.model
+
+    if args.pipeline:
+        run_pipeline(plan_data, llm_model, force_replan=args.replan)
+    else:
+        # Original Day 0 mode — called by orchestrator with PACE_REPLAN env var
+        do_replan = args.replan or os.environ.get("PACE_REPLAN", "").lower() == "true"
+        run_planner(plan_data, llm_model, replan=do_replan)
