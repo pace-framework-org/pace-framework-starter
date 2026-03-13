@@ -54,10 +54,14 @@ class AnthropicAdapter(LLMAdapter):
         tools: list[dict] | None = None,
         max_tokens: int = 8192,
     ) -> ChatResponse:
+        # Wrap the system prompt in Anthropic's prompt-caching format. The system
+        # prompt is identical on every iteration of the agentic loop, so caching
+        # its KV state reduces repeated input-token cost by ~90% for iterations 2+.
+        system_param: str | list = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
         kwargs: dict = dict(
             model=self._model,
             max_tokens=max_tokens,
-            system=system,
+            system=system_param,
             messages=messages,
         )
         if tools:

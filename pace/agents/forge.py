@@ -1,5 +1,6 @@
 """FORGE agent — implements Story Cards via an agentic tool-use loop."""
 
+import json
 import os
 import shlex
 import subprocess
@@ -11,6 +12,7 @@ from config import load_config
 from llm import get_llm_adapter
 
 REPO_ROOT = Path(__file__).parent.parent.parent
+PACE_DIR = REPO_ROOT / ".pace"
 
 # ---------------------------------------------------------------------------
 # System prompt building blocks — included/excluded based on forge config
@@ -284,6 +286,48 @@ def _load_context(doc: str) -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
+# ---------------------------------------------------------------------------
+# Conversation checkpointing
+# ---------------------------------------------------------------------------
+
+def _checkpoint_path(day: int) -> Path:
+    return PACE_DIR / f"day-{day}" / "forge_checkpoint.json"
+
+
+def _save_checkpoint(day: int, messages: list, red_phase_confirmed: bool, iteration: int) -> None:
+    path = _checkpoint_path(day)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.write_text(
+            json.dumps({
+                "messages": messages,
+                "red_phase_confirmed": red_phase_confirmed,
+                "iteration": iteration,
+            }, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        print(f"[FORGE] Warning: checkpoint save failed: {e}")
+
+
+def _load_checkpoint(day: int) -> dict | None:
+    path = _checkpoint_path(day)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"[FORGE] Warning: checkpoint load failed: {e}")
+        return None
+
+
+def _clear_checkpoint(day: int) -> None:
+    try:
+        _checkpoint_path(day).unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 def run_forge(day: int, story_card: dict, hold_reason: str | None = None) -> dict:
     cfg = load_config()
     adapter = get_llm_adapter()
@@ -324,18 +368,37 @@ You have access to tools: {tools_list}."""
 
     user_content = f"Story Card for Day {day}:\n\n{story_yaml}{engineering_section}"
 
-    if hold_reason:
-        user_content += f"\n\nPrevious attempt feedback — focus your fix on this:\n{hold_reason}"
-
-    messages = [{"role": "user", "content": user_content}]
-
     handoff_data: dict | None = None
     # red_phase_confirmed starts True when TDD is off or on a retry (code already committed).
     red_phase_confirmed: bool = (not tdd_on) or bool(hold_reason)
     tools = _build_tools(tdd_on)
     max_iterations = cfg.forge.max_iterations
+    start_iteration = 0
 
-    for iteration in range(max_iterations):
+    # On retry: try to resume from the previous run's checkpoint. A checkpoint
+    # exists only when the previous run exhausted max_iterations without calling
+    # complete_handoff. If FORGE called complete_handoff (GATE/SENTINEL HOLD),
+    # the checkpoint was cleared and we start fresh with just the hold_reason.
+    if hold_reason:
+        checkpoint = _load_checkpoint(day)
+        if checkpoint:
+            messages = checkpoint["messages"]
+            red_phase_confirmed = checkpoint.get("red_phase_confirmed", red_phase_confirmed)
+            start_iteration = checkpoint.get("iteration", 0)
+            print(f"[FORGE] Resuming from checkpoint: iteration {start_iteration}, {len(messages)} messages in history")
+            # Append the hold reason as a fresh user message so FORGE knows what to fix.
+            messages.append({"role": "user", "content": [
+                {"type": "text", "text": f"Previous attempt feedback — focus your fix on this:\n{hold_reason}"}
+            ]})
+        else:
+            user_content += f"\n\nPrevious attempt feedback — focus your fix on this:\n{hold_reason}"
+            messages = [{"role": "user", "content": user_content}]
+    else:
+        # Fresh start — clear any stale checkpoint from a previous sprint day.
+        _clear_checkpoint(day)
+        messages = [{"role": "user", "content": user_content}]
+
+    for iteration in range(start_iteration, max_iterations):
         response = adapter.chat(
             system=system_prompt,
             messages=messages,
@@ -404,10 +467,16 @@ You have access to tools: {tools_list}."""
             })
 
         if handoff_data:
+            # Successful handoff — remove checkpoint so next retry starts fresh.
+            _clear_checkpoint(day)
             break
 
         if tool_results:
             messages.append({"role": "user", "content": tool_results})
+
+        # Persist conversation state after each iteration. If this run exhausts
+        # max_iterations, the next retry can resume from here rather than restart.
+        _save_checkpoint(day, messages, red_phase_confirmed, iteration + 1)
 
     if not handoff_data:
         raise RuntimeError(f"FORGE did not call complete_handoff after {max_iterations} iterations")
