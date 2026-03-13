@@ -67,6 +67,36 @@ class CycleAbortError(Exception):
     Unlike a HOLD, this does not trigger a platform escalation issue."""
 
 
+def build_shipped_summary(current_day: int) -> str:
+    """Build a compact summary of all shipped stories up to (but not including) current_day.
+
+    Returns a markdown string of ≤500 tokens that PRIME/GATE/SENTINEL can use
+    instead of full story files, keeping context windows manageable over long sprints.
+    Returns an empty string if no stories have shipped yet.
+    """
+    lines: list[str] = []
+    for d in range(1, current_day):
+        gate_file = PACE_DIR / f"day-{d}" / "gate.md"
+        if not gate_file.exists():
+            continue
+        gate_data = yaml.safe_load(gate_file.read_text()) or {}
+        if gate_data.get("gate_decision") != "SHIP":
+            continue
+        handoff_file = PACE_DIR / f"day-{d}" / "handoff.md"
+        target = gate_data.get("story_target", f"Day {d} story")
+        if handoff_file.exists():
+            handoff = yaml.safe_load(handoff_file.read_text()) or {}
+            coverage = handoff.get("coverage_delta", "")
+            tests = handoff.get("tests_added", "")
+            detail = f"coverage_delta={coverage}, tests_added={tests}" if coverage or tests else ""
+        else:
+            detail = ""
+        lines.append(f"- Day {d} SHIPPED: {str(target)[:100]}" + (f" [{detail}]" if detail else ""))
+    if not lines:
+        return ""
+    return "## Shipped Stories (summary — do not re-plan)\n\n" + "\n".join(lines) + "\n"
+
+
 def _record_run_attempt(day: int, day_dir: Path, outcome: str, hold_reason: str) -> None:
     """Append this GitHub Actions run's cost and outcome to .pace/day-N/attempts.yaml.
 
@@ -530,6 +560,15 @@ def main() -> None:
     _platform_ref[0] = ci
 
     print(f"[PACE] === Day {day} — {day_plan['target']} ===")
+
+    # Context compaction (v2.0): build a shipped-stories summary to keep agent
+    # context windows lean over long sprints (Item 3 — Context Versioning).
+    shipped_summary = build_shipped_summary(day)
+    if shipped_summary:
+        shipped_summary_file = PACE_DIR / "context" / "shipped_summary.md"
+        shipped_summary_file.parent.mkdir(parents=True, exist_ok=True)
+        shipped_summary_file.write_text(shipped_summary)
+        print(f"[PACE] Shipped summary written ({len(shipped_summary.splitlines())} shipped days).")
 
     # Preflight: ensure context documents exist (runs SCRIBE if missing)
     try:

@@ -98,6 +98,15 @@ def run_planner(plan: dict, model: str, replan: bool = False) -> dict:
     day_0_dir = PACE_DIR / "day-0"
     day_0_dir.mkdir(parents=True, exist_ok=True)
 
+    # Context versioning (v2.0 — Item 3): bump patch version on every planner write so
+    # agents can detect drift between plan-time and execution-time context.
+    old_version = plan.get("context_version", "1.0.0")
+    try:
+        major, minor, patch = (int(x) for x in str(old_version).split("."))
+        new_version = f"{major}.{minor}.{patch + 1}"
+    except (ValueError, AttributeError):
+        new_version = "1.0.1"
+
     days = plan.get("days", [])
 
     # Load existing actuals when re-planning so completed days are not overwritten
@@ -178,6 +187,7 @@ def run_planner(plan: dict, model: str, replan: bool = False) -> dict:
         "day": 0,
         "agent": "PLANNER",
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "context_version": new_version,   # bumped from plan.yaml on every planner write
         "estimation_model": model,
         "total_estimated_usd": total_estimated,
         "planning_cost_usd": 0.0,  # Filled in by orchestrator after spend tracking

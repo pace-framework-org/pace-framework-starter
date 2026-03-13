@@ -128,6 +128,23 @@ llm:
   # base_url: null   # Optional endpoint override (e.g. for self-hosted Ollama)
   # base_url: "http://localhost:11434"
 
+  # ---------------------------------------------------------------------------
+  # Token limits per agent class (v2.0 — Context Versioning)
+  # ---------------------------------------------------------------------------
+  # Coding agents (FORGE, SCRIBE) need large windows: system prompt (~4k) +
+  # tool definitions (~5k) + file contents (up to ~80k) + iteration history.
+  # Analysis agents (PRIME, GATE, SENTINEL, CONDUIT) receive summarised context.
+  #
+  # WARNING: forge_input_tokens below 32000 is dangerously low — a single large
+  # file read plus conversation history at iteration 10+ routinely exceeds 32k.
+  #
+  # These defaults are safe. Only lower them if you are running a cost budget.
+  limits:
+    forge_input_tokens: 160000     # FORGE + SCRIBE input context ceiling
+    forge_output_tokens: 16384     # prevents mid-file truncation during code gen
+    analysis_input_tokens: 80000   # PRIME/GATE/SENTINEL/CONDUIT input context ceiling
+    analysis_output_tokens: 8192   # structured YAML analysis responses
+
 # ---------------------------------------------------------------------------
 # Cost control — proactive story scoping before FORGE runs
 # ---------------------------------------------------------------------------

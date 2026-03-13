@@ -35,11 +35,30 @@ class TechConfig:
 
 
 @dataclass
+class LLMLimitsConfig:
+    """Per-agent-class token limits.
+
+    Coding agents (FORGE, SCRIBE) need much larger context windows than
+    analysis agents (PRIME, GATE, SENTINEL, CONDUIT) because they must hold
+    full file contents and multi-iteration conversation history.
+    """
+    forge_input_tokens: int = 160000    # FORGE/SCRIBE: system prompt + tools + files + history
+    forge_output_tokens: int = 16384    # FORGE writes complete files; prevents mid-impl truncation
+    analysis_input_tokens: int = 80000  # PRIME/GATE/SENTINEL/CONDUIT: story context, not codebases
+    analysis_output_tokens: int = 8192  # structured analysis responses are shorter
+
+
+@dataclass
 class LLMConfig:
-    provider: str        # "anthropic" | "litellm"
-    model: str           # model ID for FORGE/SCRIBE (e.g. "claude-sonnet-4-6")
-    analysis_model: str  # model ID for PRIME/GATE/SENTINEL/CONDUIT — defaults to model
-    base_url: str | None # optional endpoint override (e.g. for Ollama)
+    provider: str           # "anthropic" | "litellm"
+    model: str              # model ID for FORGE/SCRIBE (e.g. "claude-sonnet-4-6")
+    analysis_model: str     # model ID for PRIME/GATE/SENTINEL/CONDUIT — defaults to model
+    base_url: str | None    # optional endpoint override (e.g. for Ollama)
+    limits: LLMLimitsConfig = None  # type: ignore[assignment]  # per-agent-class token limits
+
+    def __post_init__(self) -> None:
+        if self.limits is None:
+            self.limits = LLMLimitsConfig()
 
 
 @dataclass
@@ -128,11 +147,19 @@ def load_config() -> PaceConfig:
     cc_raw = raw.get("cost_control", {})
 
     forge_model = llm_raw.get("model", "claude-sonnet-4-6")
+    limits_raw = llm_raw.get("limits", {}) or {}
+    llm_limits = LLMLimitsConfig(
+        forge_input_tokens=int(limits_raw.get("forge_input_tokens", 160000)),
+        forge_output_tokens=int(limits_raw.get("forge_output_tokens", 16384)),
+        analysis_input_tokens=int(limits_raw.get("analysis_input_tokens", 80000)),
+        analysis_output_tokens=int(limits_raw.get("analysis_output_tokens", 8192)),
+    )
     llm = LLMConfig(
         provider=llm_raw.get("provider", "anthropic"),
         model=forge_model,
         analysis_model=llm_raw.get("analysis_model", forge_model),
         base_url=llm_raw.get("base_url"),
+        limits=llm_limits,
     )
 
     cost_control = CostControlConfig(
