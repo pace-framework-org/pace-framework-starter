@@ -105,6 +105,25 @@ reporter:
   timezone: "UTC"
 
 # ---------------------------------------------------------------------------
+# Auto-update — version checking and self-update behaviour (v2.0)
+# ---------------------------------------------------------------------------
+updates:
+  # When true (default), PACE checks for a new version once per calendar day.
+  # If a newer version is available and no local customizations are detected,
+  # the update is applied automatically (git checkout + pip install).
+  # Set false to disable version checking entirely.
+  auto_update: true
+
+  # When auto_update is true but local customizations are detected, PACE emits
+  # a WARNING at every pipeline run. Set suppress_warning: true to silence it
+  # (e.g. you are aware of the pending update and will merge it manually).
+  suppress_warning: false
+
+  # "stable" — follow the latest non-prerelease tag (recommended)
+  # "beta"   — follow the latest tag including pre-releases
+  channel: stable
+
+# ---------------------------------------------------------------------------
 # LLM — AI provider and model for all PACE agents
 # ---------------------------------------------------------------------------
 llm:
