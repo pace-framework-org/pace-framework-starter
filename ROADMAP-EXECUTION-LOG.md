@@ -304,6 +304,27 @@ Rationale: A failed version check (network error, API rate limit, malformed resp
 **AD-4-3: `apply_update()` checks for pipeline.lock**
 Rationale: If `apply_update()` ran while another pipeline was active, the second pipeline would see partially-updated PACE files mid-run. The lock check prevents this race condition.
 
+#### Item 4: Post-PR Fixes
+
+Two code quality issues identified after initial PR was raised (commit `6224c6e`):
+
+**Fix 1 — Unreachable `else` branch in `check_and_warn()`**
+
+The original code had:
+
+```python
+if not suppress_warning or auto_update:
+    customizations = detect_customizations()
+else:
+    customizations = []
+```
+
+The `else` branch was unreachable. The early return `if not auto_update and suppress_warning: return` at the top of the function already handles the only case where `not (not suppress_warning or auto_update)` is true — i.e. `suppress_warning=True and auto_update=False`. Simplified to `customizations = detect_customizations()` with no conditional. Behavior is identical.
+
+**Fix 2 — Empty `except` in `_read_cache()`**
+
+The original `except Exception: pass` silently discarded all cache read/parse errors with no diagnostic output. Replaced with `except Exception as e:` plus a brief `print()` log message so corrupted or unreadable cache files surface as debug output rather than vanishing silently. The function still returns `None` (cache miss) on error — the non-fatal contract is preserved.
+
 ---
 
 ### Item 8 — Cron Configuration
