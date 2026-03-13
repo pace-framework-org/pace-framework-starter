@@ -43,6 +43,13 @@ class LLMConfig:
 
 
 @dataclass
+class ReleaseConfig:
+    name: str               # Release version/name (e.g. "v2.0", "q1-2026")
+    release_days: int = 90  # Total calendar days in the release
+    sprint_days: int = 7    # Days per sprint (1–release_days)
+
+
+@dataclass
 class CostControlConfig:
     max_story_ac: int = 5         # trigger PRIME refinement if AC count exceeds this (0 = disabled)
     max_story_cost_usd: float = 0.0  # trigger PRIME refinement if SCOPE predicts more (0 = disabled)
@@ -71,6 +78,7 @@ class PaceConfig:
     forge: ForgeConfig               # FORGE agent behaviour (TDD, coverage rule)
     advisory_push_to_issues: bool  # Whether to open issues for backlogged advisory findings
     reporter_timezone: str = "UTC"  # IANA timezone for timestamps (e.g. "America/New_York")
+    release: ReleaseConfig | None = None  # v2.0 release/sprint branching model (optional)
 
     def source_dirs_table(self) -> str:
         """Return a formatted table of source directories for use in agent system prompts."""
@@ -147,6 +155,17 @@ def load_config() -> PaceConfig:
         max_iterations=int(forge_raw.get("max_iterations", 35)),
     )
 
+    release_raw = raw.get("release")
+    release = (
+        ReleaseConfig(
+            name=str(release_raw["name"]),
+            release_days=int(release_raw.get("release_days", 90)),
+            sprint_days=int(release_raw.get("sprint_days", 7)),
+        )
+        if release_raw and release_raw.get("name")
+        else None
+    )
+
     return PaceConfig(
         product_name=product.get("name", "My Product"),
         product_description=str(product.get("description", "")).strip(),
@@ -162,4 +181,5 @@ def load_config() -> PaceConfig:
         forge=forge,
         advisory_push_to_issues=bool(advisory_raw.get("push_to_issues", False)),
         reporter_timezone=reporter_raw.get("timezone", "UTC"),
+        release=release,
     )

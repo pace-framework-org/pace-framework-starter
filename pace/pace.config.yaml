@@ -22,6 +22,19 @@ sprint:
   duration_days: 30                     # Total days in the sprint
 
 # ---------------------------------------------------------------------------
+# Release — optional; enables the sprint/release branch hierarchy (v2.0)
+# ---------------------------------------------------------------------------
+# When configured, PACE creates and maintains:
+#   main → staging → release/<name> → rel/sprint/pace-N
+# at the start of every day. Each branch level gets a PR gate when the
+# sprint completes. Leave commented out to run without branch management.
+#
+# release:
+#   name: "v2.0"          # Release version/name used in branch name (e.g. "v2.0", "q1-2026")
+#   release_days: 90      # Total calendar days in the release (default: 90)
+#   sprint_days: 7        # Days per sprint within the release (default: 7)
+
+# ---------------------------------------------------------------------------
 # Source code — FORGE only writes into the directories listed here.
 # Paths are relative to the repo root.
 # ---------------------------------------------------------------------------

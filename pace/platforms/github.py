@@ -1,9 +1,10 @@
 """PACE GitHub Platform Adapters.
 
-GitHubCIAdapter     — CI/CD and PR integration via GitHub Actions and REST API.
-GitHubTrackerAdapter — Issue tracking via GitHub Issues.
+GitHubCIAdapter        — CI/CD and PR integration via GitHub Actions and REST API.
+GitHubTrackerAdapter   — Issue tracking via GitHub Issues.
+GitHubBranchingAdapter — Release/sprint branch hierarchy management.
 
-Both adapters share credentials:
+All adapters share credentials:
     GITHUB_TOKEN      — personal access token or Actions ${{ secrets.GITHUB_TOKEN }}
     GITHUB_REPOSITORY — owner/repo (e.g. "myorg/myrepo")
 """
@@ -21,6 +22,7 @@ try:
 except ImportError:
     _REQUESTS_AVAILABLE = False
 
+from branching import BranchingAdapter
 from platforms.base import CIAdapter, TrackerAdapter
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
@@ -398,4 +400,108 @@ PACE could not resolve this HOLD after 2 retries. Human intervention required.
             return url
         except Exception as e:
             print(f"[GitHub] Failed to open advisory issue: {e}")
+            return ""
+
+
+class GitHubBranchingAdapter(_GitHubBase, BranchingAdapter):
+    """Manages the release/sprint branch hierarchy via the GitHub REST API.
+
+    All mutating operations (create_branch, create_pull_request) are
+    no-ops when the adapter is not configured (token/repo missing).
+    """
+
+    # ------------------------------------------------------------------
+    # BranchingAdapter implementation
+    # ------------------------------------------------------------------
+
+    def get_branch_sha(self, branch: str) -> str | None:
+        """Return HEAD SHA of branch, or None if it doesn't exist."""
+        if not self._available:
+            return None
+        try:
+            resp = _requests.get(
+                self._api(f"git/ref/heads/{branch}"),
+                headers=self._headers(),
+                timeout=15,
+            )
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.json()["object"]["sha"]
+        except Exception as e:
+            print(f"[GitHub] get_branch_sha({branch!r}): {e}")
+            return None
+
+    def create_branch(self, new_branch: str, from_branch: str) -> None:
+        """Create new_branch from the HEAD of from_branch via the refs API.
+
+        No-op if new_branch already exists (get_branch_sha check by caller).
+        """
+        if not self._available:
+            print(f"[GitHub] Adapter not configured — skipping create_branch({new_branch!r})")
+            return
+        sha = self.get_branch_sha(from_branch)
+        if not sha:
+            print(
+                f"[GitHub] create_branch: source '{from_branch}' not found — "
+                f"cannot create '{new_branch}'"
+            )
+            return
+        try:
+            resp = _requests.post(
+                self._api("git/refs"),
+                headers=self._headers(),
+                json={"ref": f"refs/heads/{new_branch}", "sha": sha},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            print(f"[GitHub] Branch created: {new_branch} (from {from_branch} @ {sha[:8]})")
+        except Exception as e:
+            # 422 = ref already exists — harmless race condition
+            if hasattr(e, "response") and getattr(e.response, "status_code", None) == 422:
+                print(f"[GitHub] Branch '{new_branch}' already exists (race condition — ok)")
+            else:
+                print(f"[GitHub] create_branch({new_branch!r}): {e}")
+
+    def create_pull_request(
+        self,
+        head: str,
+        base: str,
+        title: str,
+        body: str,
+        labels: list[str] | None = None,
+    ) -> str:
+        """Open a PR from head → base. Returns the PR URL, or '' on failure."""
+        if not self._available:
+            print(f"[GitHub] Adapter not configured — skipping PR: {head} → {base}")
+            return ""
+        try:
+            resp = _requests.post(
+                self._api("pulls"),
+                headers=self._headers(),
+                json={"title": title, "body": body, "head": head, "base": base},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            pr = resp.json()
+            url = pr.get("html_url", "")
+            pr_number = pr.get("number")
+            print(f"[GitHub] PR opened: {url}")
+            if labels and pr_number:
+                try:
+                    _requests.post(
+                        self._api(f"issues/{pr_number}/labels"),
+                        headers=self._headers(),
+                        json={"labels": labels},
+                        timeout=15,
+                    ).raise_for_status()
+                except Exception as le:
+                    print(f"[GitHub] Failed to add labels to PR #{pr_number}: {le}")
+            return url
+        except Exception as e:
+            # 422 = PR already exists between these branches
+            if hasattr(e, "response") and getattr(e.response, "status_code", None) == 422:
+                print(f"[GitHub] PR {head} → {base} already exists — skipping")
+            else:
+                print(f"[GitHub] create_pull_request({head} → {base}): {e}")
             return ""
