@@ -412,5 +412,16 @@ You have access to tools: {tools_list}."""
     if not handoff_data:
         raise RuntimeError(f"FORGE did not call complete_handoff after {max_iterations} iterations")
 
+    # Coerce string list fields — FORGE sometimes writes a markdown bullet string
+    # instead of a YAML array for known_gaps / edge_cases_tested.
+    for field in ("known_gaps", "edge_cases_tested"):
+        val = handoff_data.get(field)
+        if isinstance(val, str):
+            handoff_data[field] = [
+                line.lstrip("- ").strip()
+                for line in val.splitlines()
+                if line.strip() and line.strip() != "-"
+            ]
+
     jsonschema.validate(handoff_data, HANDOFF_SCHEMA)
     return handoff_data
