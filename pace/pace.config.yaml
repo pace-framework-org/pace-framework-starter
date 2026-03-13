@@ -97,6 +97,21 @@ advisory:
   push_to_issues: false
 
 # ---------------------------------------------------------------------------
+# Cron schedules — centralized pipeline scheduling (v2.0)
+# ---------------------------------------------------------------------------
+# Edit these values and run `python pace/ci_generator.py --apply` to
+# regenerate the cron triggers in your CI workflow files automatically.
+# All expressions are 5-field POSIX format (minute hour dom month dow).
+#
+# Tip: change the schedule here, run ci_generator.py --apply, commit both
+# files together. Never edit the cron in the workflow YAML directly.
+cron:
+  pace_pipeline: "0 9 * * 1-5"    # main PACE run — weekdays at 09:00 UTC
+  planner_pipeline: "0 8 * * 1"   # weekly re-plan — Monday at 08:00 UTC
+  update_check: "0 0 * * *"       # daily update check — midnight UTC
+  timezone: "UTC"                  # IANA timezone for schedule interpretation
+
+# ---------------------------------------------------------------------------
 # Reporter — controls output formatting
 # ---------------------------------------------------------------------------
 reporter:
