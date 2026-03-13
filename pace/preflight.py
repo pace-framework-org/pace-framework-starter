@@ -3,6 +3,12 @@
 Called once per orchestrator run. Instant no-op if all 4 docs are present.
 Triggers SCRIBE to generate missing docs, then commits them.
 
+Also runs the auto-update check (Item 4 — Auto-Update Mechanism):
+  - check_for_update(): query GitHub releases API (cached 23h)
+  - detect_customizations(): git diff against installed tag
+  - emit WARNING if update available but customizations block it
+  - apply_update() if no customizations and auto_update=true
+
 To force a regeneration of any document: delete it from .pace/context/ and re-run.
 """
 
@@ -22,8 +28,29 @@ def _missing_docs() -> list[str]:
     return [doc for doc in REQUIRED_DOCS if not (CONTEXT_DIR / doc).exists()]
 
 
+def _run_update_check() -> None:
+    """Run the auto-update check. Non-fatal — errors are logged and skipped."""
+    try:
+        from config import load_config
+        from updater import check_and_warn
+        cfg = load_config()
+        check_and_warn(
+            auto_update=cfg.updates.auto_update,
+            suppress_warning=cfg.updates.suppress_warning,
+            channel=cfg.updates.channel,
+        )
+    except Exception as exc:
+        print(f"[PACE] Update check skipped: {exc}")
+
+
 def run_preflight(day: int) -> None:
-    """Verify context documents are present. Run SCRIBE if any are missing."""
+    """Verify context documents are present. Run SCRIBE if any are missing.
+
+    Also runs the auto-update check at the start of every pipeline run.
+    """
+    # Auto-update check (Item 4) — runs before SCRIBE to surface version info early
+    _run_update_check()
+
     missing = _missing_docs()
 
     if not missing:

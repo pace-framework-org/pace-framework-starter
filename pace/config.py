@@ -82,6 +82,13 @@ class ForgeConfig:
 
 
 @dataclass
+class UpdatesConfig:
+    auto_update: bool = True        # apply update automatically when no customizations found
+    suppress_warning: bool = False  # silence the customization WARNING
+    channel: str = "stable"        # "stable" | "beta"
+
+
+@dataclass
 class PaceConfig:
     product_name: str
     product_description: str
@@ -98,6 +105,11 @@ class PaceConfig:
     advisory_push_to_issues: bool  # Whether to open issues for backlogged advisory findings
     reporter_timezone: str = "UTC"  # IANA timezone for timestamps (e.g. "America/New_York")
     release: ReleaseConfig | None = None  # v2.0 release/sprint branching model (optional)
+    updates: UpdatesConfig = None  # type: ignore[assignment]  # auto-update behaviour
+
+    def __post_init__(self) -> None:
+        if self.updates is None:
+            self.updates = UpdatesConfig()
 
     def source_dirs_table(self) -> str:
         """Return a formatted table of source directories for use in agent system prompts."""
@@ -193,6 +205,13 @@ def load_config() -> PaceConfig:
         else None
     )
 
+    updates_raw = raw.get("updates", {}) or {}
+    updates = UpdatesConfig(
+        auto_update=bool(updates_raw.get("auto_update", True)),
+        suppress_warning=bool(updates_raw.get("suppress_warning", False)),
+        channel=str(updates_raw.get("channel", "stable")),
+    )
+
     return PaceConfig(
         product_name=product.get("name", "My Product"),
         product_description=str(product.get("description", "")).strip(),
@@ -209,4 +228,5 @@ def load_config() -> PaceConfig:
         advisory_push_to_issues=bool(advisory_raw.get("push_to_issues", False)),
         reporter_timezone=reporter_raw.get("timezone", "UTC"),
         release=release,
+        updates=updates,
     )
