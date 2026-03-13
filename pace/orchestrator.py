@@ -535,6 +535,10 @@ def main() -> None:
 
     atexit.register(_flush_spend)
 
+    # Always release the pipeline lock on exit, regardless of outcome (Item 8)
+    from preflight import release_pipeline_lock
+    atexit.register(release_pipeline_lock)
+
     if os.environ.get("PACE_PAUSED", "").lower() == "true":
         print("[PACE] Loop is paused (PACE_PAUSED=true). Resolve the open escalation issue to resume.")
         sys.exit(0)

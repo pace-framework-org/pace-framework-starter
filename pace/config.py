@@ -89,6 +89,19 @@ class UpdatesConfig:
 
 
 @dataclass
+class CronConfig:
+    """Centralized cron schedule for all PACE pipelines.
+
+    Used by ci_generator.py to regenerate workflow files when schedules change.
+    All cron expressions are 5-field POSIX format (minute hour dom month dow).
+    """
+    pace_pipeline: str = "0 9 * * 1-5"    # main daily cycle (weekdays at 09:00 UTC)
+    planner_pipeline: str = "0 8 * * 1"   # weekly re-plan (Monday at 08:00 UTC)
+    update_check: str = "0 0 * * *"       # daily update check (midnight UTC)
+    timezone: str = "UTC"                 # IANA timezone used when interpreting schedules
+
+
+@dataclass
 class PaceConfig:
     product_name: str
     product_description: str
@@ -106,10 +119,13 @@ class PaceConfig:
     reporter_timezone: str = "UTC"  # IANA timezone for timestamps (e.g. "America/New_York")
     release: ReleaseConfig | None = None  # v2.0 release/sprint branching model (optional)
     updates: UpdatesConfig = None  # type: ignore[assignment]  # auto-update behaviour
+    cron: CronConfig = None  # type: ignore[assignment]  # CI pipeline schedules
 
     def __post_init__(self) -> None:
         if self.updates is None:
             self.updates = UpdatesConfig()
+        if self.cron is None:
+            self.cron = CronConfig()
 
     def source_dirs_table(self) -> str:
         """Return a formatted table of source directories for use in agent system prompts."""
@@ -212,6 +228,14 @@ def load_config() -> PaceConfig:
         channel=str(updates_raw.get("channel", "stable")),
     )
 
+    cron_raw = raw.get("cron", {}) or {}
+    cron = CronConfig(
+        pace_pipeline=str(cron_raw.get("pace_pipeline", "0 9 * * 1-5")),
+        planner_pipeline=str(cron_raw.get("planner_pipeline", "0 8 * * 1")),
+        update_check=str(cron_raw.get("update_check", "0 0 * * *")),
+        timezone=str(cron_raw.get("timezone", "UTC")),
+    )
+
     return PaceConfig(
         product_name=product.get("name", "My Product"),
         product_description=str(product.get("description", "")).strip(),
@@ -229,4 +253,5 @@ def load_config() -> PaceConfig:
         reporter_timezone=reporter_raw.get("timezone", "UTC"),
         release=release,
         updates=updates,
+        cron=cron,
     )
