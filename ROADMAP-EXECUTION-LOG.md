@@ -2,14 +2,24 @@
 
 **Author:** Vivek Meehnia
 **Started:** 2026-03-13 (IST — Asia/Kolkata)
-**Log Version:** 1.0
-**Aligned With:** ROADMAP v1.1
+**Log Version:** 1.2
+**Aligned With:** ROADMAP v1.2
+
+---
+
+## Log Version History
+
+| Version | Date | Changes |
+| ------- | ---- | ------- |
+| 1.0 | 2026-03-13 | Phase 1 entries: Items 9, 1, 2 |
+| 1.1 | 2026-03-13 | Phase 2 entries added: Items 3, 4, 8; Post-PR fixes for Item 4 |
+| 1.2 | 2026-03-14 | Variations from Plan sections added to all implemented items; CC-7 branch-rebase entry; log aligned with ROADMAP v1.2 |
 
 ---
 
 ## Overview
 
-This log records every code change, architectural decision, and trade-off made while executing the PACE Framework v2.0 ROADMAP. Each entry is tied to a roadmap item, a branch, and a PR.
+This log records every code change, architectural decision, trade-off, and deviation from the plan made while executing the PACE Framework v2.0 ROADMAP. Each entry is tied to a roadmap item, a branch, and a PR. Deviations from the original ROADMAP plan are captured under *Variations from Plan* within each item.
 
 ---
 
@@ -64,6 +74,12 @@ Rationale: Teams using PACE in CI pipelines (Jenkins, GitLab) may want to parse 
 
 **AD-9-3: Run before budget check in pace.yml**
 Rationale: A config error discovered after an API call wastes money. Config validation is a purely local operation that costs nothing — it runs first.
+
+#### Item 9: Variations from Plan
+
+No scope deviations. All six planned steps were implemented as specified.
+
+The `_validate_cron` validator references the `cron` config section introduced by Item 8. Although Item 8 is a Phase 2 item, the validator was included in Item 9's implementation to future-proof the validation step — it is a no-op when `cron:` is absent from the config.
 
 ---
 
@@ -129,6 +145,16 @@ Rationale: Existing PACE v1.x projects have no `release:` key. When the key is a
 **AD-1-4: Separate `BranchingAdapter` from `CIAdapter`**
 Rationale: CI operations (PR reviews, CI polling, variable setting) and branching operations (creating refs) have different lifecycles and failure modes. Keeping them separate follows the single-responsibility principle and makes each adapter easier to test.
 
+#### Item 1: Variations from Plan
+
+| ROADMAP Step | Planned | Actual | Status |
+| ------------ | ------- | ------ | ------ |
+| Step 3 | BranchingAdapter for GitHub, GitLab, Bitbucket | GitHub fully implemented; GitLab/Bitbucket fall back to `LocalBranchingAdapter` via factory | Partial — GitLab/Bitbucket deferred to Item 7 |
+| Step 5 | CONDUIT: PR from `release/<name>` → `staging` after all sprints merged; monitor CI; open `staging` → `main` on pass; HOLD on fail | Not implemented | Deferred to Phase 3 |
+| Step 6 | Branch-protection checks in `preflight.py` | Not implemented | Deferred to Phase 3 |
+
+**Impact:** The branch hierarchy creation (steps 1–2, 4) is complete. The automated promotion chain (`release → staging → main`) requires Phase 3 CONDUIT work. Users can merge the sprint PR to `release/<name>` manually until Phase 3 delivers the automated gate.
+
 ---
 
 ### Item 2 — PACE Planner Pipeline
@@ -189,6 +215,16 @@ Rationale: The plan-approval branch is ephemeral and PACE-owned. It is never use
 
 **AD-2-4: `--replan` flag for forced re-estimation**
 Rationale: A team may want to force all-day re-estimation even before any days ship (e.g., after a scope change). `--replan` makes this an explicit, auditable action rather than relying on the presence of shipped days.
+
+#### Item 2: Variations from Plan
+
+| ROADMAP Step | Planned | Actual | Status |
+| ------------ | ------- | ------ | ------ |
+| Step 3 | PRIME agent `plan_mode` flag returning a structured re-plan diff | Not implemented — `planner.py` handles re-estimation directly without invoking PRIME | Deferred to Phase 3 |
+| Step 4 | CONDUIT creates plan-approval PR and sets `PACE_PAUSED=true` | `planner.py --pipeline` calls `ci.set_variable("PACE_PAUSED", "true")` directly; CONDUIT not modified | Variation — simpler implementation, same functional outcome |
+| Step 5 | SCRIBE generates human-readable planning report with budget impact and scope delta | Not implemented — only `planner.py` generates the `planner.md` YAML report | Deferred to Phase 3 |
+
+**Impact:** The core shipped-days protection, cost re-estimation, and plan-approval PR gate all work as planned. The PRIME re-plan diff and SCRIBE narrative report are value-adds deferred to Phase 3. The PACE_PAUSED mechanism works correctly via the platform CI adapter.
 
 ---
 
@@ -259,6 +295,17 @@ Rationale: Writing to `.pace/context/shipped_summary.md` makes the summary visib
 **AD-3-3: Semver patch bump (not calendar date) for context_version**
 Rationale: A calendar date gives no ordering information between multiple re-plans on the same day. Semver patch increments are deterministic and comparable.
 
+#### Item 3: Variations from Plan
+
+| ROADMAP Step | Planned | Actual | Status |
+| ------------ | ------- | ------ | ------ |
+| Step 3 | Explicitly pass `shipped_summary.md` to PRIME, GATE, SENTINEL instead of full story files | `shipped_summary.md` written to `.pace/context/`; individual agent call sites not modified to substitute it | Partial — agents that read from the context directory pick it up; explicit wiring deferred |
+| Step 6 (new) | Per-call retry with compacted prompt when `call_exceeds_limit()` returns true | Only helpers added (`session_total`, `call_exceeds_limit`); the retry loop was not implemented | Deferred to Phase 3 |
+
+**Branch rebase:** This branch rebased cleanly onto `main` after Phase 1 items (Items 1 and 2) landed — no conflicts.
+
+**Impact:** Context versioning and shipped-summary compaction are functional. The token enforcement retry loop (compacting and re-submitting when a call exceeds limits) requires Phase 3 work in the agent loop.
+
 ---
 
 ### Item 4 — Auto-Update Mechanism
@@ -325,6 +372,29 @@ The `else` branch was unreachable. The early return `if not auto_update and supp
 
 The original `except Exception: pass` silently discarded all cache read/parse errors with no diagnostic output. Replaced with `except Exception as e:` plus a brief `print()` log message so corrupted or unreadable cache files surface as debug output rather than vanishing silently. The function still returns `None` (cache miss) on error — the non-fatal contract is preserved.
 
+#### Item 4: Variations from Plan
+
+| ROADMAP Step | Planned | Actual | Status |
+| ------------ | ------- | ------ | ------ |
+| Step 7 | CONDUIT: include update summary in daily report when update applied; deferred-update warning when blocked by customizations | CONDUIT not modified | Deferred to Phase 3 |
+| Step 8 | Reference tutorial at `tutorials/updating-customised-pace` in pace-docs | Tutorial URL is a placeholder (`https://pace-docs.example.com/tutorials/updating-customised-pace`); the tutorial page does not yet exist | Deferred to docs team |
+
+**Post-PR code quality fixes (commit `6224c6e`):**
+
+| Issue | Original | Fixed |
+| ----- | -------- | ----- |
+| Unreachable `else` in `check_and_warn()` | `if not suppress_warning or auto_update: ... else: customizations = []` — the `else` was dead code given the early return above it | Removed `if/else`; always call `detect_customizations()` directly |
+| Silent `except` in `_read_cache()` | `except Exception: pass` — errors silently swallowed | `except Exception as e:` with `print()` diagnostic; still returns `None` on error |
+
+**Branch rebase (2026-03-14):** This branch was created before Phase 1 Items 1 and 2 landed on `main`. After those merges, `config.py` diverged: the branch replaced `ReleaseConfig` (from Item 1) with `UpdatesConfig` (from Item 4). Resolution: rebased onto `main`; `PaceConfig` now contains both fields:
+
+```python
+release: ReleaseConfig | None = None   # from Item 1
+updates: UpdatesConfig = None          # from Item 4 (post_init default)
+```
+
+**Impact:** Auto-update core is functional. CONDUIT report integration deferred. Tutorial URL is a known placeholder that needs a real docs page before v2.0-beta GA.
+
 ---
 
 ### Item 8 — Cron Configuration
@@ -368,6 +438,30 @@ Rationale: Python YAML serializers (PyYAML, ruamel.yaml) do not preserve comment
 **AD-8-3: Stale lock threshold of 4 hours**
 Rationale: The `pace.yml` workflow has a `timeout-minutes: 90` limit. A lock older than 4 hours is definitely from a crashed run. 4h gives comfortable headroom above 90 minutes while being short enough to recover within a business day if the previous run crashed.
 
+#### Item 8: Variations from Plan
+
+| ROADMAP Step | Planned | Actual | Status |
+| ------------ | ------- | ------ | ------ |
+| Step 4 | `orchestrator.py` `finally` block releases lock | Lock release registered via `atexit.register()` in `orchestrator.py` — not a `finally` block | Variation — `atexit` is cleaner given `sys.exit()` calls throughout `main()` (see AD-8-1) |
+| Step 5 | `config_tester.py` suggestion: run `ci_generator.py` if cron values differ from workflow file | `config_tester.py` not modified; cross-item wiring not done | Deferred to Phase 2 follow-up |
+
+**Default cron schedule changes from ROADMAP spec:**
+
+| Schedule | ROADMAP Spec | Implemented Default | Rationale |
+| -------- | ------------ | ------------------- | --------- |
+| `pace_pipeline` | `0 6 * * 1-5` (06:00 UTC weekdays) | `0 9 * * 1-5` (09:00 UTC weekdays) | 09:00 UTC avoids overlap with overnight CI jobs and aligns with business hours in IST/AEST |
+| `planner_pipeline` | `0 7 * * 0` (07:00 Sunday) | `0 8 * * 1` (08:00 Monday) | Monday morning re-plan fits sprint cadence better; Sunday is typically off-hours for most teams |
+| `update_check` | `0 0 * * *` (midnight) | `0 0 * * *` (midnight) | Unchanged |
+
+**Branch rebase (2026-03-14):** This branch was created before Phase 1 Items 1 and 2 landed on `main`. After those merges, `config.py` diverged: the branch replaced `ReleaseConfig` (from Item 1) with `CronConfig` (from Item 8). Resolution: rebased onto `main`; `PaceConfig` now contains both fields:
+
+```python
+release: ReleaseConfig | None = None   # from Item 1
+cron: CronConfig = None                # from Item 8 (post_init default)
+```
+
+**Impact:** Pipeline lock and cron config are fully functional. The `config_tester.py` cross-wire suggestion is a UX improvement deferred to follow-up work.
+
 ---
 
 ## Cross-Cutting Decisions (Phase 2)
@@ -384,6 +478,22 @@ Items 3, 4, and 8 all add new optional fields (`llm.limits`, `updates`, `cron`) 
 
 Any `pace.config.yaml` without `llm.limits`, `updates:`, or `cron:` sections parses cleanly with all defaults applied. No existing project needs to update their config to use v2.0.
 
+### CC-7: Phase 2 branches required rebase after Phase 1 landed (2026-03-14)
+
+All three Phase 2 branches (`phase2/item-3-context-versioning`, `phase2/item-4-auto-update`, `phase2/item-8-cron-config`) were created from `main` before Phase 1 Items 1 and 2 merged. After those merges, `config.py` on each Phase 2 branch was missing `ReleaseConfig` (added by Item 1). Rebasing surfaced merge conflicts in `config.py` for Items 4 and 8; Item 3 rebased cleanly.
+
+**Conflict pattern (Items 4 and 8):** Each Phase 2 branch had replaced the `release: ReleaseConfig` field with its own new field (`updates: UpdatesConfig` or `cron: CronConfig`). The correct resolution in all cases was to keep both fields in `PaceConfig`, both parsers in `load_config()`, and both constructor arguments.
+
+**Final `PaceConfig` optional-field section after resolution (on each respective branch):**
+
+| Branch | Optional fields at tail of `PaceConfig` |
+| ------ | --------------------------------------- |
+| `phase2/item-3-context-versioning` | `release`, `llm.limits` (via `LLMConfig.__post_init__`) |
+| `phase2/item-4-auto-update` | `release`, `updates` (via `PaceConfig.__post_init__`) |
+| `phase2/item-8-cron-config` | `release`, `cron` (via `PaceConfig.__post_init__`) |
+
+When all PRs are eventually merged to `main`, the canonical `PaceConfig` will contain all four: `release`, `llm.limits`, `updates`, and `cron`.
+
 ---
 
 ## Pending Work
@@ -396,10 +506,16 @@ Any `pace.config.yaml` without `llm.limits`, `updates:`, or `cron:` sections par
 | Item 3 (Context Versioning) | PR #4 open | Review and merge |
 | Item 4 (Auto-Update) | PR #5 open | Review and merge |
 | Item 8 (Cron Config) | PR #6 open | Review and merge |
-| Items 5, 6, 7 (Phase 3) | Not started | See ROADMAP Phase 3 |
-| Item 10 (Phase 4) | Not started | See ROADMAP Phase 4 |
+| Items 5, 6, 7 (Phase 3) | Not started | See ROADMAP Phase 3 (`@Since v2.0-rc`) |
+| Item 10 (Phase 4) | Not started | See ROADMAP Phase 4 (`@Since v2.1`) |
+| Item 1 deferred steps (5–6) | Not started | Staging CI gate + branch-protection checks |
+| Item 2 deferred steps (3, 5) | Not started | PRIME plan_mode, SCRIBE planning report |
+| Item 3 deferred step (6) | Not started | Token limit retry loop in agent call sites |
+| Item 4 deferred step (7) | Not started | CONDUIT update summary in daily report |
+| Item 4 tutorial URL | Placeholder | Real `pace-docs` tutorial page needed |
+| Item 8 deferred step (5) | Not started | `config_tester.py` ↔ `ci_generator.py` cross-wire |
 
 ---
 
-*ROADMAP Execution Log v1.1 — 2026-03-13 IST (Phase 2 added)*
+*ROADMAP Execution Log v1.2 — 2026-03-14 IST (Variations from Plan added; log aligned with ROADMAP v1.2)*
 *Author: Vivek Meehnia*

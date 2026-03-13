@@ -2,9 +2,14 @@
 
 **Author:** Vipuul Meehniaa
 **Date:** 2026-03-13:19:09 (IST — Asia/Kolkata)
-**Roadmap Version:** 1.1 (revised 2026-03-13 IST)
+**Roadmap Version:** 1.2 (revised 2026-03-14 IST — @Since tags and deferred-scope notes added)
 **PACE Framework Baseline:** v1.2.0
 **Target Release:** PACE v2.0
+
+> **How to read this document:**
+> Each item carries an `@Since <version>` tag indicating the target PACE release.
+> Steps marked **[DEFERRED]** were descoped from the initial implementation and are tracked in
+> [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md) under the item's *Variations from Plan* section.
 
 ---
 
@@ -28,6 +33,9 @@ This roadmap covers ten strategic improvements to the PACE framework, each asses
 ## Phase 1 — Foundation
 
 ### Item 1: Sprint/Release Branching Model
+
+> **@Since** `v2.0-alpha` &nbsp;·&nbsp; **PR:** #2 &nbsp;·&nbsp; **Status:** Open
+> Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-1--sprintrelease-branching-model)
 
 **Assessment**
 
@@ -65,13 +73,18 @@ main
 2. Update `orchestrator.py`: detect current sprint number from git branch history; create branch hierarchy if absent.
 3. Add `BranchingAdapter` to `platforms/` with implementations for GitHub, GitLab, Bitbucket.
 4. Implement end-of-sprint merge PR creation in CONDUIT (`rel/sprint/pace-N` → `release/<name>`).
-5. CONDUIT: after all sprint PRs are merged to `release/<name>`, open a PR to `staging`. Monitor the staging CI run; once it passes, open the final PR from `staging` → `main`. If staging CI fails, open a HOLD issue and set `PACE_PAUSED=true`.
-6. Add branch-protection checks to `preflight.py` — abort if `main` or `staging` protection rules are missing.
+5. **[DEFERRED → Phase 3]** CONDUIT: after all sprint PRs are merged to `release/<name>`, open a PR to `staging`. Monitor the staging CI run; once it passes, open the final PR from `staging` → `main`. If staging CI fails, open a HOLD issue and set `PACE_PAUSED=true`.
+6. **[DEFERRED → Phase 3]** Add branch-protection checks to `preflight.py` — abort if `main` or `staging` protection rules are missing.
 7. Acceptance: (a) PACE creates the full `main → staging → release/v2.0 → rel/sprint/pace-1` hierarchy on first run; (b) end-of-sprint PR is opened to `release/v2.0`; (c) after all sprints merge, a PR to `staging` is opened; (d) once staging CI passes, the final PR to `main` is opened automatically.
+
+> **Scope note (v2.0-alpha implementation):** Steps 5–6 were deferred to Phase 3. GitLab and Bitbucket branching adapters in step 3 are interface stubs (fall back to `LocalBranchingAdapter`); only GitHub is fully implemented. See [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-1--sprintrelease-branching-model) → *Variations from Plan*.
 
 ---
 
 ### Item 2: PACE Planner Pipeline
+
+> **@Since** `v2.0-alpha` &nbsp;·&nbsp; **PR:** #3 &nbsp;·&nbsp; **Status:** Open
+> Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-2--pace-planner-pipeline)
 
 **Assessment**
 
@@ -91,15 +104,20 @@ Extract Day-0 into a standalone, re-runnable **pace-planner** pipeline:
 
 1. Extract planning logic from `orchestrator.py` into `planner.py` (already exists as a stub — flesh it out).
 2. Add `pace-planner.yml` CI workflow alongside `pace.yml`.
-3. PRIME agent: add `plan_mode` flag that returns a structured re-plan diff (new stories, removed stories, scope changes) rather than directly writing `plan.yaml`.
+3. **[DEFERRED → Phase 3]** PRIME agent: add `plan_mode` flag that returns a structured re-plan diff (new stories, removed stories, scope changes) rather than directly writing `plan.yaml`.
 4. CONDUIT: create plan-approval PR; set `PACE_PAUSED=true` as a CI/CD variable; unset after merge.
-5. SCRIBE: generate a human-readable planning report summarising budget impact and scope delta when re-planning.
+5. **[DEFERRED → Phase 3]** SCRIBE: generate a human-readable planning report summarising budget impact and scope delta when re-planning.
 6. `planner.py`: serialize shipped stories to a `shipped.yaml` manifest; never re-plan shipped items.
 7. Acceptance: re-running `pace-planner` after two stories are SHIPPED produces a PR that excludes those stories and shows updated cost projection.
+
+> **Scope note (v2.0-alpha implementation):** Steps 3 and 5 (PRIME plan_mode, SCRIBE report) were deferred. Step 4 variation: CONDUIT was not modified; `planner.py --pipeline` calls `ci.set_variable()` directly. See [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-2--pace-planner-pipeline) → *Variations from Plan*.
 
 ---
 
 ### Item 9: Configuration Tester
+
+> **@Since** `v2.0-alpha` &nbsp;·&nbsp; **PR:** #1 &nbsp;·&nbsp; **Status:** Open
+> Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-9--configuration-tester)
 
 **Assessment**
 
@@ -129,6 +147,9 @@ Build a `pace-config-test` CLI command and CI step that validates `pace.config.y
 
 ### Item 3: Context Versioning & Token Management
 
+> **@Since** `v2.0-beta` &nbsp;·&nbsp; **PR:** #4 &nbsp;·&nbsp; **Status:** Open
+> Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-3--context-versioning--token-management)
+
 **Assessment**
 
 PACE currently has no systematic approach to managing the total token context across multi-day sprints. Each agent call starts fresh except for FORGE's new checkpoint (added in v1.2). Story files, handoff YAML, and plan data grow unbounded. There is no versioning of the planning context, so drift between `plan.yaml` and `.pace/day-N/story.md` is invisible.
@@ -147,8 +168,9 @@ Implement three complementary mechanisms:
 
 1. Add `context_version: "1.0.0"` to `plan.yaml` schema; bump on every planner write.
 2. `orchestrator.py`: build `shipped_summary.md` at start of each day from `.pace/day-*/handoff.yaml` files where `status == SHIPPED`.
-3. Pass `shipped_summary.md` content instead of full story files to PRIME, GATE, SENTINEL.
+3. **[PARTIAL]** Pass `shipped_summary.md` content instead of full story files to PRIME, GATE, SENTINEL. (File is written to `.pace/context/`; individual agent call sites not yet modified to substitute it.)
 4. Add `llm.limits` to `pace.config.yaml`. Defaults are set per agent class, not globally, because coding agents require far larger context windows than analysis agents:
+
    ```yaml
    llm:
      limits:
@@ -158,13 +180,20 @@ Implement three complementary mechanisms:
        analysis_input_tokens: 80000  # PRIME/GATE/SENTINEL/CONDUIT: story context, not codebases
        analysis_output_tokens: 8192  # structured analysis responses are shorter
    ```
+
    Note: 32k input is dangerously low for FORGE on any non-trivial codebase. A single file read + conversation history routinely exceeds that in iteration 10+.
 5. `spend_tracker.py`: expose `session_total()` and `call_exceeds_limit(agent_class, input, output)` helpers (agent class determines which limit applies).
-6. Acceptance: a 30-day sprint with 20 shipped stories passes PRIME a summary of ≤500 tokens for those stories rather than full text.
+6. **[DEFERRED → Phase 3]** Per-call retry with compacted prompt when `call_exceeds_limit()` returns true.
+7. Acceptance: a 30-day sprint with 20 shipped stories passes PRIME a summary of ≤500 tokens for those stories rather than full text.
+
+> **Scope note (v2.0-beta implementation):** Step 3 is partial (file written, no agent call-site changes). Step 6 (retry loop) deferred. See [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-3--context-versioning--token-management) → *Variations from Plan*.
 
 ---
 
 ### Item 4: Auto-Update Mechanism
+
+> **@Since** `v2.0-beta` &nbsp;·&nbsp; **PR:** #5 &nbsp;·&nbsp; **Status:** Open
+> Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-4--auto-update-mechanism)
 
 **Assessment**
 
@@ -199,13 +228,18 @@ Add a daily version-check with customization-aware update behaviour:
 4. `apply_update()`: only called when `detect_customizations()` returns empty; git-fetches the new tag; runs `pip install -r requirements.txt -q`; writes the new version to `.pace/update_check.json`.
 5. Add pipeline lock: `.pace/pipeline.lock` created at pipeline start, deleted at pipeline end; `apply_update()` aborts if lock exists.
 6. `preflight.py`: call `check_for_update()` and `detect_customizations()` at startup; emit WARNING block if newer version available but customizations block update.
-7. CONDUIT: include version-update summary in daily report if an update was applied; include deferred-update warning if customizations block it.
+7. **[DEFERRED → Phase 3]** CONDUIT: include version-update summary in daily report if an update was applied; include deferred-update warning if customizations block it.
 8. Reference the upgrade tutorial (`tutorials/updating-customised-pace` in pace-docs) in all WARNING output.
 9. Acceptance: (a) with no customizations, a version bump triggers auto-update; (b) with a modified `forge.py`, update is skipped and WARNING lists the file; (c) `updates.suppress_warning: true` silences the WARNING without disabling version checking.
+
+> **Scope note (v2.0-beta implementation):** Step 7 (CONDUIT report) deferred. Step 8 tutorial URL is a placeholder (`pace-docs.example.com`) — the docs page does not yet exist. Two post-PR code quality fixes applied (unreachable `else`, silent `except`). Branch required rebase onto `main` after Phase 1 landed. See [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-4--auto-update-mechanism) → *Variations from Plan*.
 
 ---
 
 ### Item 8: Cron Configuration
+
+> **@Since** `v2.0-beta` &nbsp;·&nbsp; **PR:** #6 &nbsp;·&nbsp; **Status:** Open
+> Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-8--cron-configuration)
 
 **Assessment**
 
@@ -231,14 +265,18 @@ The CI pipeline generators (GitHub, GitLab, Jenkins) read `cron` from `pace.conf
 2. Add `pace/ci_generator.py`: reads `cron` config and regenerates `.github/workflows/pace.yml` (or `.gitlab-ci.yml`, `Jenkinsfile`) cron triggers.
 3. `preflight.py`: acquire `.pace/pipeline.lock` (write PID + timestamp); fail immediately if lock is stale (> 4 hours old, configurable).
 4. `orchestrator.py` `finally` block: always release the lock.
-5. Add `python pace/ci_generator.py` to `pace-config-test` output as a suggestion if cron fields differ from workflow file.
+5. **[DEFERRED → Phase 2 follow-up]** Add `python pace/ci_generator.py` to `pace-config-test` output as a suggestion if cron fields differ from workflow file.
 6. Acceptance: changing `cron.pace_pipeline` in config and running `ci_generator.py` updates the `schedule.cron` field in the generated workflow YAML.
+
+> **Scope note (v2.0-beta implementation):** Step 5 (config_tester cross-wire) deferred. Default cron schedules changed from the values in this plan: `pace_pipeline` is `0 9 * * 1-5` (09:00 UTC, not 06:00); `planner_pipeline` is `0 8 * * 1` (Monday, not Sunday). Branch required rebase onto `main` after Phase 1 landed. See [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-8--cron-configuration) → *Variations from Plan*.
 
 ---
 
 ## Phase 3 — Integration & Ecosystem
 
 ### Item 5: Communication & Alerting
+
+> **@Since** `v2.0-rc` &nbsp;·&nbsp; **Status:** Planned — not yet started
 
 **Assessment**
 
@@ -290,6 +328,8 @@ alerts:
 
 ### Item 6: Tracker Artifact Push & Issue Templates
 
+> **@Since** `v2.0-rc` &nbsp;·&nbsp; **Status:** Planned — not yet started
+
 **Assessment**
 
 All PACE artifacts — stories, test plans, handoff data, advisory findings — currently live exclusively in the `.pace/day-N/` directory tree. The configured issue tracker (`tracker_type`) is only used to open HOLD issues; it is never used to push structured story or test artifacts. Teams cannot use their tracker's native search, filtering, or reporting on PACE-generated content.
@@ -317,6 +357,8 @@ Extend `TrackingAdapter` to push artifacts as tracker items:
 
 ### Item 7: GitLab, Jenkins, and Bitbucket Pipeline Finalization
 
+> **@Since** `v2.0-rc` &nbsp;·&nbsp; **Status:** Planned — not yet started (branching adapter stubs exist from Item 1)
+
 **Assessment**
 
 `platforms/gitlab.py`, `platforms/jenkins.py`, and `platforms/bitbucket.py` exist but are incomplete stubs. The `ci_generator.py` proposed in Item 8 does not yet have templates for these platforms. Users who prefer GitLab CI or Jenkins cannot use PACE without significant manual work.
@@ -340,6 +382,8 @@ Finalize pipeline templates and platform adapter implementations for GitLab, Jen
 ## Phase 4 — Extensibility
 
 ### Item 10: Plugin System
+
+> **@Since** `v2.1` &nbsp;·&nbsp; **Status:** Planned — not yet started
 
 **Assessment**
 
@@ -443,5 +487,5 @@ This is deferred to post-v2.1 because it requires a minimum viable dataset that 
 
 ---
 
-*PACE Framework Roadmap v1.0 — 2026-03-13 IST*
-*Author: Vipull Meehniaa*
+*PACE Framework Roadmap v1.2 — 2026-03-14 IST*
+*Author: Vipuul Meehniaa*
