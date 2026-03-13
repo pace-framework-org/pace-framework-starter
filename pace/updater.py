@@ -92,8 +92,9 @@ def _read_cache() -> dict | None:
         cached_at = data.get("cached_at", 0)
         if time.time() - cached_at < _CACHE_TTL_SECONDS:
             return data
-    except Exception:
-        pass
+    except Exception as e:
+        # Treat any cache read/parse error as a cache miss — non-fatal.
+        print(f"[PACE Updater] Ignoring stale or corrupted cache: {e}")
     return None
 
 
@@ -254,10 +255,7 @@ def check_and_warn(
     latest = info["latest_version"]
     new_tag = f"v{latest}"
 
-    if not suppress_warning or auto_update:
-        customizations = detect_customizations()
-    else:
-        customizations = []
+    customizations = detect_customizations()
 
     if auto_update and not customizations:
         applied = apply_update(new_tag)
