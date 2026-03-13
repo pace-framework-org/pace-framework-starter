@@ -11,6 +11,16 @@ Usage (orchestrator):
     import spend_tracker
     cost = spend_tracker.total_usd()
     print(spend_tracker.summary())
+
+Token-limit helpers (Item 3 — Context Versioning):
+    import spend_tracker
+    spend_tracker.session_total()              # (input_tokens, output_tokens) totals
+    spend_tracker.call_exceeds_limit(          # True if a single call would breach limits
+        agent_class="forge",
+        input_tokens=45000,
+        output_tokens=2000,
+        limits=cfg.llm.limits,
+    )
 """
 
 from __future__ import annotations
@@ -41,6 +51,42 @@ def total_usd() -> float:
         total += (r["in"]  / 1_000_000) * c["input"]
         total += (r["out"] / 1_000_000) * c["output"]
     return total
+
+
+def session_total() -> tuple[int, int]:
+    """Return (total_input_tokens, total_output_tokens) for this process run."""
+    total_in = sum(r["in"] for r in _records)
+    total_out = sum(r["out"] for r in _records)
+    return total_in, total_out
+
+
+def call_exceeds_limit(
+    agent_class: str,
+    input_tokens: int,
+    output_tokens: int,
+    limits: "object | None" = None,
+) -> bool:
+    """Return True if the given token counts breach the per-agent-class limit.
+
+    agent_class: "forge" (covers FORGE + SCRIBE) or "analysis" (covers PRIME,
+                 GATE, SENTINEL, CONDUIT). Any unrecognised class returns False.
+    limits: an LLMLimitsConfig instance (from config.llm.limits). When None,
+            the check is skipped and False is returned.
+    """
+    if limits is None:
+        return False
+    agent_class = agent_class.lower()
+    if agent_class == "forge":
+        return (
+            input_tokens > getattr(limits, "forge_input_tokens", 160000)
+            or output_tokens > getattr(limits, "forge_output_tokens", 16384)
+        )
+    if agent_class == "analysis":
+        return (
+            input_tokens > getattr(limits, "analysis_input_tokens", 80000)
+            or output_tokens > getattr(limits, "analysis_output_tokens", 8192)
+        )
+    return False
 
 
 def summary() -> str:
