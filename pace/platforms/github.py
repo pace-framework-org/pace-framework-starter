@@ -402,6 +402,86 @@ PACE could not resolve this HOLD after 2 retries. Human intervention required.
             print(f"[GitHub] Failed to open advisory issue: {e}")
             return ""
 
+    # ------------------------------------------------------------------
+    # Story ticket
+    # ------------------------------------------------------------------
+
+    def push_story(self, day: int, day_dir: Path) -> str:
+        if not self._available:
+            print("[GitHub] push_story: adapter not configured — skipping.")
+            return ""
+        story_file = day_dir / "story.md"
+        if not story_file.exists():
+            print(f"[GitHub] push_story: story.md not found in {day_dir}")
+            return ""
+
+        from issue_template import story_body_markdown
+        story_card = yaml.safe_load(story_file.read_text()) or {}
+        target = story_card.get("target", f"Day {day} story")
+        try:
+            resp = _requests.post(
+                self._api("issues"),
+                headers=self._headers(),
+                json={
+                    "title": f"[PACE Day {day}] {target}",
+                    "body": story_body_markdown(day, story_card),
+                    "labels": ["pace-story", f"pace-day-{day}"],
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            url = data.get("html_url", "")
+            number = data.get("number")
+            self._save_ticket_ref(day_dir, {"url": url, "id": number, "platform": "github"})
+            print(f"[GitHub] Story ticket opened: {url}")
+            return url
+        except Exception as e:
+            print(f"[GitHub] push_story failed: {e}")
+            return ""
+
+    def update_story_status(self, day: int, day_dir: Path, status: str) -> None:
+        if not self._available:
+            return
+        ref = self._load_ticket_ref(day_dir)
+        number = ref.get("id")
+        if not number:
+            print(f"[GitHub] update_story_status: no ticket reference for Day {day}")
+            return
+        try:
+            state = "closed" if status == "done" else "open"
+            _requests.patch(
+                self._api(f"issues/{number}"),
+                headers=self._headers(),
+                json={"state": state},
+                timeout=15,
+            )
+            print(f"[GitHub] Story issue #{number} state → '{state}' (Day {day})")
+        except Exception as e:
+            print(f"[GitHub] update_story_status failed: {e}")
+
+    def post_handoff_comment(self, day: int, day_dir: Path) -> None:
+        if not self._available:
+            return
+        ref = self._load_ticket_ref(day_dir)
+        number = ref.get("id")
+        handoff_file = day_dir / "handoff.md"
+        if not number or not handoff_file.exists():
+            print(f"[GitHub] post_handoff_comment: missing ref or handoff.md for Day {day}")
+            return
+        from issue_template import handoff_comment_markdown
+        handoff = yaml.safe_load(handoff_file.read_text()) or {}
+        try:
+            _requests.post(
+                self._api(f"issues/{number}/comments"),
+                headers=self._headers(),
+                json={"body": handoff_comment_markdown(day, handoff)},
+                timeout=15,
+            )
+            print(f"[GitHub] Handoff comment posted to issue #{number} (Day {day})")
+        except Exception as e:
+            print(f"[GitHub] post_handoff_comment failed: {e}")
+
 
 class GitHubBranchingAdapter(_GitHubBase, BranchingAdapter):
     """Manages the release/sprint branch hierarchy via the GitHub REST API.

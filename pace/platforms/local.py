@@ -198,6 +198,54 @@ PACE could not resolve this HOLD after 2 retries. Human intervention required.
         return str(out_file)
 
     # ------------------------------------------------------------------
+    # Story ticket — written to a local file
+    # ------------------------------------------------------------------
+
+    def push_story(self, day: int, day_dir: Path) -> str:
+        story_file = day_dir / "story.md"
+        if not story_file.exists():
+            print(f"[Local] push_story: story.md not found in {day_dir}")
+            return ""
+
+        from issue_template import story_body_markdown
+        story_card = yaml.safe_load(story_file.read_text()) or {}
+        body = story_body_markdown(day, story_card)
+
+        out_file = day_dir / "story-ticket.md"
+        out_file.write_text(body)
+        url = str(out_file)
+        self._save_ticket_ref(day_dir, {"url": url, "id": f"local-day-{day}", "platform": "local"})
+        print(f"[Local] Story ticket written to: {out_file}")
+        return url
+
+    def update_story_status(self, day: int, day_dir: Path, status: str) -> None:
+        ref = self._load_ticket_ref(day_dir)
+        if not ref:
+            print(f"[Local] update_story_status: no ticket reference found for Day {day}")
+            return
+        out_file = day_dir / "story-ticket.md"
+        if out_file.exists():
+            out_file.write_text(
+                out_file.read_text() + f"\n\n---\n\n**Status updated: `{status}`** (Day {day})\n"
+            )
+        print(f"[Local] Story ticket status updated to '{status}' for Day {day}")
+
+    def post_handoff_comment(self, day: int, day_dir: Path) -> None:
+        ref = self._load_ticket_ref(day_dir)
+        handoff_file = day_dir / "handoff.md"
+        if not ref or not handoff_file.exists():
+            print(f"[Local] post_handoff_comment: missing ticket ref or handoff.md for Day {day}")
+            return
+
+        from issue_template import handoff_comment_markdown
+        handoff = yaml.safe_load(handoff_file.read_text()) or {}
+        comment = handoff_comment_markdown(day, handoff)
+
+        comment_file = day_dir / "story-handoff-comment.md"
+        comment_file.write_text(comment)
+        print(f"[Local] Handoff comment written to: {comment_file}")
+
+    # ------------------------------------------------------------------
     # Advisory findings — written to local file
     # ------------------------------------------------------------------
 
