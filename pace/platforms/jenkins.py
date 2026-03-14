@@ -240,8 +240,8 @@ with a Git hosting platform (GitHub/GitLab/Bitbucket) for review gating.
             if self._VARIABLES_FILE.exists():
                 data = json.loads(self._VARIABLES_FILE.read_text())
                 return data.get(name)
-        except (json.JSONDecodeError, OSError):
-            pass
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"[Jenkins] get_variable failed to read {self._VARIABLES_FILE.name}: {exc}")
         return None
 
 
