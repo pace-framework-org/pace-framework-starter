@@ -261,6 +261,46 @@ cost_control:
 #     channels: [slack]
 
 # ---------------------------------------------------------------------------
+# Plugins — extend PACE with community or custom plugins (v2.1)
+# ---------------------------------------------------------------------------
+# Plugins are Python packages installed alongside PACE that register
+# themselves via pyproject.toml entry points under the pace.plugins.* groups.
+# PACE auto-discovers all installed plugins at startup. Use this section to:
+#   - Provide per-plugin configuration (API keys, URLs, etc.)
+#   - Disable a plugin without uninstalling its package (enabled: false)
+#   - Override the webhook-in HTTP server port (default: 9876)
+#
+# Plugin types:
+#   agent       — adds a new agent to the pipeline
+#   tool        — adds a tool to FORGE/SCRIBE's tool registry
+#   adapter     — adds a new LLM/platform/notification adapter
+#   hook        — runs at pipeline lifecycle events (fire-and-forget)
+#   webhook-in  — exposes an HTTP listener for external triggers
+#   webhook-out — POSTs structured JSON to a URL on lifecycle events
+#
+# Example:
+# plugins:
+#   - name: "pace-plugin-linear"          # must match plugin's manifest name
+#     enabled: true                        # default true; set false to skip
+#     config:
+#       api_key: "${LINEAR_API_KEY}"       # ${VAR} env interpolation supported
+#       team_id: "ENG"
+#
+#   - name: "pace-plugin-webhook-out"
+#     config:
+#       url: "${WEBHOOK_URL}"
+#       subscribed_events: [day_shipped, day_held]
+#
+#   - name: "pace-plugin-webhook-in"
+#     webhook_in_port: 9876               # port for the built-in HTTP listener
+#     config:
+#       secret: "${WEBHOOK_SECRET}"
+#
+# Supported lifecycle events for hook / webhook-out plugins:
+#   pipeline_start   pipeline_end   day_start    day_shipped    day_held
+#   story_generated  forge_complete gate_pass    sentinel_pass  conduit_pass
+
+# ---------------------------------------------------------------------------
 # FORGE agent behaviour
 # ---------------------------------------------------------------------------
 forge:

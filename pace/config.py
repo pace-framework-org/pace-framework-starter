@@ -6,7 +6,7 @@ Call load_config() once per agent invocation — it is fast (cached after first 
 
 from __future__ import annotations
 
-PACE_VERSION = "1.2.0"
+PACE_VERSION = "2.0.0"
 
 import os
 import re
@@ -114,6 +114,19 @@ class CronConfig:
 
 
 @dataclass
+class PluginEntryConfig:
+    """Configuration for one plugin in the plugins: YAML section.
+
+    Every installed plugin that declares itself via entry points is auto-discovered;
+    this section provides per-plugin settings and an enable/disable toggle.
+    """
+    name: str                              # Must match the plugin's PluginManifest.name
+    enabled: bool = True                   # Set false to skip without uninstalling
+    webhook_in_port: int | None = None     # Override the default webhook-in port (9876)
+    config: dict = field(default_factory=dict)  # Plugin-specific key/value config
+
+
+@dataclass
 class SlackConfig:
     """Slack Incoming Webhook credentials."""
     webhook_url: str  # supports ${VAR_NAME} env interpolation
@@ -174,6 +187,7 @@ class PaceConfig:
     cron: CronConfig = None  # type: ignore[assignment]  # CI pipeline schedules
     notifications: NotificationsConfig | None = None  # notification channel credentials
     alerts: list[AlertRuleConfig] | None = None        # alert rules (event → channels)
+    plugins: list[PluginEntryConfig] | None = None     # installed plugin configurations (v2.1)
 
     def __post_init__(self) -> None:
         if self.updates is None:
@@ -227,6 +241,24 @@ def _parse_notifications(raw: dict) -> NotificationsConfig | None:
     if not any([slack, teams, email]):
         return None
     return NotificationsConfig(slack=slack, teams=teams, email=email)
+
+
+def _parse_plugins(raw: list) -> list[PluginEntryConfig] | None:
+    """Build a list of PluginEntryConfig from the ``plugins:`` YAML section."""
+    if not raw:
+        return None
+    entries: list[PluginEntryConfig] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        port_raw = item.get("webhook_in_port")
+        entries.append(PluginEntryConfig(
+            name=str(item["name"]),
+            enabled=bool(item.get("enabled", True)),
+            webhook_in_port=int(port_raw) if port_raw is not None else None,
+            config=dict(item.get("config") or {}),
+        ))
+    return entries or None
 
 
 def _parse_alerts(raw: list) -> list[AlertRuleConfig] | None:
@@ -348,6 +380,7 @@ def load_config() -> PaceConfig:
 
     notifications = _parse_notifications(raw.get("notifications") or {})
     alerts = _parse_alerts(raw.get("alerts") or [])
+    plugins = _parse_plugins(raw.get("plugins") or [])
 
     return PaceConfig(
         product_name=product.get("name", "My Product"),
@@ -369,4 +402,5 @@ def load_config() -> PaceConfig:
         cron=cron,
         notifications=notifications,
         alerts=alerts,
+        plugins=plugins,
     )
