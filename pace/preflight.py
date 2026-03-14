@@ -62,6 +62,16 @@ def acquire_pipeline_lock() -> None:
             age = time.time() - LOCK_FILE.stat().st_mtime
             if age < _LOCK_MAX_AGE_SECONDS:
                 content = LOCK_FILE.read_text().strip()
+                # Fire pipeline_lock_timeout alert (best-effort — must not block the error)
+                try:
+                    from config import load_config
+                    from alert_engine import AlertEngine
+                    AlertEngine(load_config()).fire(
+                        "pipeline_lock_timeout",
+                        {"lock_file": str(LOCK_FILE), "elapsed_minutes": round(age / 60, 1)},
+                    )
+                except Exception:
+                    pass
                 raise RuntimeError(
                     f"Pipeline lock is held by another run (age: {age/60:.1f}m).\n"
                     f"  Lock file: {LOCK_FILE}\n"

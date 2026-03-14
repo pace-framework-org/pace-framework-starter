@@ -309,6 +309,87 @@ def _validate_cost_control(raw: dict, r: ConfigTestResult) -> None:
         )
 
 
+_KNOWN_ALERT_EVENTS = {
+    "hold_opened",
+    "story_shipped",
+    "cost_exceeded",
+    "pipeline_lock_timeout",
+    "update_available",
+}
+_KNOWN_CHANNELS = {"slack", "teams", "email"}
+
+
+def _validate_notifications(raw: dict, r: ConfigTestResult) -> None:
+    notif = raw.get("notifications") or {}
+    alerts = raw.get("alerts") or []
+
+    if not notif and not alerts:
+        r.suggest(
+            "notifications and alerts are not configured; PACE v2.0 supports Slack/Teams/email "
+            "alerts for hold_opened, story_shipped, cost_exceeded and more — see ROADMAP.md Item 5"
+        )
+        return
+
+    # Determine which channels are actually configured
+    configured_channels: set[str] = set()
+
+    if notif.get("slack", {}) and notif["slack"].get("webhook_url"):
+        configured_channels.add("slack")
+    if notif.get("teams", {}) and notif["teams"].get("webhook_url"):
+        configured_channels.add("teams")
+    email_raw = notif.get("email", {}) or {}
+    if email_raw.get("smtp_host"):
+        configured_channels.add("email")
+        if not email_raw.get("to_addrs"):
+            r.error("notifications.email.to_addrs must have at least one recipient address")
+        smtp_port = email_raw.get("smtp_port", 587)
+        if not isinstance(smtp_port, int) or smtp_port < 1 or smtp_port > 65535:
+            r.error(f"notifications.email.smtp_port must be an integer 1–65535, got: {smtp_port!r}")
+
+    if notif and not configured_channels:
+        r.warn(
+            "notifications section is present but no channel (slack/teams/email) is fully configured; "
+            "alerts will be silently dropped"
+        )
+
+    # Validate alert rules
+    for i, rule in enumerate(alerts):
+        if not isinstance(rule, dict):
+            r.error(f"alerts[{i}] must be a mapping (event/channels/thresholds)")
+            continue
+        event = rule.get("event")
+        if not event:
+            r.error(f"alerts[{i}].event is required")
+        elif event not in _KNOWN_ALERT_EVENTS:
+            r.warn(
+                f"alerts[{i}].event '{event}' is not one of the known events "
+                f"({', '.join(sorted(_KNOWN_ALERT_EVENTS))}); "
+                "it will only fire if a matching event is fired by the orchestrator"
+            )
+        channels = rule.get("channels", [])
+        if isinstance(channels, str):
+            channels = [channels]
+        if not channels:
+            r.warn(f"alerts[{i}] (event={event!r}) has no channels — alert will be a no-op")
+        for ch in channels:
+            if ch not in _KNOWN_CHANNELS:
+                r.error(
+                    f"alerts[{i}].channels: '{ch}' is not a supported channel "
+                    f"(supported: {', '.join(sorted(_KNOWN_CHANNELS))})"
+                )
+            elif ch not in configured_channels:
+                r.warn(
+                    f"alerts[{i}].channels references '{ch}' but notifications.{ch} "
+                    "is not configured — alert will be silently dropped for this channel"
+                )
+
+    if alerts and not notif:
+        r.warn(
+            "alerts are configured but notifications section is missing; "
+            "no channel credentials are available and all alerts will be dropped"
+        )
+
+
 def _validate_cron(raw: dict, r: ConfigTestResult) -> None:
     cron = raw.get("cron")
     if cron is None:
@@ -373,6 +454,7 @@ def run_config_test(config_file: Path = CONFIG_FILE) -> ConfigTestResult:
     _validate_llm_limits(raw, r)
     _validate_forge(raw, r)
     _validate_cost_control(raw, r)
+    _validate_notifications(raw, r)
     _validate_cron(raw, r)
     _validate_reporter(raw, r)
 

@@ -8,10 +8,22 @@ from __future__ import annotations
 
 PACE_VERSION = "1.2.0"
 
+import os
+import re
 import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 from functools import lru_cache
+
+
+def _interpolate_env(value: str) -> str:
+    """Replace ``${VAR_NAME}`` patterns with environment variable values.
+
+    Unknown variables are left as-is so the caller can detect misconfiguration.
+    """
+    if not isinstance(value, str):
+        return value
+    return re.sub(r"\$\{([^}]+)\}", lambda m: os.environ.get(m.group(1), m.group(0)), value)
 
 CONFIG_FILE = Path(__file__).parent / "pace.config.yaml"
 REPO_ROOT = Path(__file__).parent.parent
@@ -102,6 +114,46 @@ class CronConfig:
 
 
 @dataclass
+class SlackConfig:
+    """Slack Incoming Webhook credentials."""
+    webhook_url: str  # supports ${VAR_NAME} env interpolation
+
+
+@dataclass
+class TeamsConfig:
+    """Microsoft Teams Incoming Webhook credentials."""
+    webhook_url: str  # supports ${VAR_NAME} env interpolation
+
+
+@dataclass
+class EmailConfig:
+    """SMTP relay credentials for email notifications."""
+    smtp_host: str
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None   # supports ${VAR_NAME} env interpolation
+    from_addr: str = ""
+    to_addrs: list[str] = field(default_factory=list)
+
+
+@dataclass
+class NotificationsConfig:
+    """Notification channel configuration (at least one channel required to send alerts)."""
+    slack: SlackConfig | None = None
+    teams: TeamsConfig | None = None
+    email: EmailConfig | None = None
+
+
+@dataclass
+class AlertRuleConfig:
+    """A single alert rule: fire *channels* when *event* occurs (and optional thresholds pass)."""
+    event: str                              # "hold_opened" | "story_shipped" | "cost_exceeded" | ...
+    channels: list[str] = field(default_factory=list)  # ["slack"] | ["teams", "email"] | ...
+    threshold_usd: float | None = None      # only fire when payload["cost_usd"] >= this
+    threshold_minutes: float | None = None  # only fire when payload["elapsed_minutes"] >= this
+
+
+@dataclass
 class PaceConfig:
     product_name: str
     product_description: str
@@ -120,6 +172,8 @@ class PaceConfig:
     release: ReleaseConfig | None = None  # v2.0 release/sprint branching model (optional)
     updates: UpdatesConfig = None  # type: ignore[assignment]  # auto-update behaviour
     cron: CronConfig = None  # type: ignore[assignment]  # CI pipeline schedules
+    notifications: NotificationsConfig | None = None  # notification channel credentials
+    alerts: list[AlertRuleConfig] | None = None        # alert rules (event → channels)
 
     def __post_init__(self) -> None:
         if self.updates is None:
@@ -137,6 +191,62 @@ class PaceConfig:
     def source_dirs_names(self) -> str:
         """Return a comma-separated list of source directory labels."""
         return ", ".join(d.name for d in self.source_dirs) if self.source_dirs else "(none)"
+
+
+def _parse_notifications(raw: dict) -> NotificationsConfig | None:
+    """Build a NotificationsConfig from the ``notifications:`` YAML section."""
+    if not raw:
+        return None
+
+    slack: SlackConfig | None = None
+    slack_raw = raw.get("slack") or {}
+    if slack_raw.get("webhook_url"):
+        slack = SlackConfig(webhook_url=_interpolate_env(slack_raw["webhook_url"]))
+
+    teams: TeamsConfig | None = None
+    teams_raw = raw.get("teams") or {}
+    if teams_raw.get("webhook_url"):
+        teams = TeamsConfig(webhook_url=_interpolate_env(teams_raw["webhook_url"]))
+
+    email: EmailConfig | None = None
+    email_raw = raw.get("email") or {}
+    if email_raw.get("smtp_host"):
+        to_addrs = email_raw.get("to_addrs", [])
+        if isinstance(to_addrs, str):
+            to_addrs = [a.strip() for a in to_addrs.split(",") if a.strip()]
+        raw_pw = email_raw.get("smtp_password")
+        email = EmailConfig(
+            smtp_host=email_raw["smtp_host"],
+            smtp_port=int(email_raw.get("smtp_port", 587)),
+            smtp_user=email_raw.get("smtp_user"),
+            smtp_password=_interpolate_env(str(raw_pw)) if raw_pw is not None else None,
+            from_addr=email_raw.get("from_addr", ""),
+            to_addrs=to_addrs,
+        )
+
+    if not any([slack, teams, email]):
+        return None
+    return NotificationsConfig(slack=slack, teams=teams, email=email)
+
+
+def _parse_alerts(raw: list) -> list[AlertRuleConfig] | None:
+    """Build a list of AlertRuleConfig from the ``alerts:`` YAML section."""
+    if not raw:
+        return None
+    rules: list[AlertRuleConfig] = []
+    for item in raw:
+        channels = item.get("channels", [])
+        if isinstance(channels, str):
+            channels = [channels]
+        threshold_usd = item.get("threshold_usd")
+        threshold_minutes = item.get("threshold_minutes")
+        rules.append(AlertRuleConfig(
+            event=str(item["event"]),
+            channels=list(channels),
+            threshold_usd=float(threshold_usd) if threshold_usd is not None else None,
+            threshold_minutes=float(threshold_minutes) if threshold_minutes is not None else None,
+        ))
+    return rules or None
 
 
 @lru_cache(maxsize=1)
@@ -236,6 +346,9 @@ def load_config() -> PaceConfig:
         timezone=str(cron_raw.get("timezone", "UTC")),
     )
 
+    notifications = _parse_notifications(raw.get("notifications") or {})
+    alerts = _parse_alerts(raw.get("alerts") or [])
+
     return PaceConfig(
         product_name=product.get("name", "My Product"),
         product_description=str(product.get("description", "")).strip(),
@@ -254,4 +367,6 @@ def load_config() -> PaceConfig:
         release=release,
         updates=updates,
         cron=cron,
+        notifications=notifications,
+        alerts=alerts,
     )
