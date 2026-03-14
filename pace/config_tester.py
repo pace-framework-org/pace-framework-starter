@@ -390,6 +390,93 @@ def _validate_notifications(raw: dict, r: ConfigTestResult) -> None:
         )
 
 
+def _validate_plugins(raw: dict, r: ConfigTestResult) -> None:
+    plugins = raw.get("plugins")
+    if not plugins:
+        return
+
+    if not isinstance(plugins, list):
+        r.error("plugins must be a list of plugin entries")
+        return
+
+    from importlib.metadata import entry_points, packages_distributions
+
+    # Discover installed plugin manifests from entry points
+    installed_names: dict[str, str] = {}  # name → version (best-effort)
+    _PLUGIN_GROUPS = [
+        "pace.plugins.agents", "pace.plugins.tools", "pace.plugins.adapters",
+        "pace.plugins.hooks", "pace.plugins.webhooks_in", "pace.plugins.webhooks_out",
+    ]
+    for group in _PLUGIN_GROUPS:
+        try:
+            for ep in entry_points(group=group):
+                try:
+                    klass = ep.load()
+                    instance = klass()
+                    m = instance.manifest()
+                    installed_names[m.name] = m.version
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    from config import PACE_VERSION
+
+    def _ver_compat(current: str, min_v: str, max_v: str | None) -> bool:
+        try:
+            def _t(v: str) -> tuple[int, ...]:
+                return tuple(int(x) for x in v.split(".")[:3])
+            cur = _t(current)
+            return _t(min_v) <= cur and (max_v is None or cur <= _t(max_v))
+        except Exception:
+            return True
+
+    seen_names: set[str] = set()
+    for i, item in enumerate(plugins):
+        if not isinstance(item, dict):
+            r.error(f"plugins[{i}] must be a mapping (name/enabled/config)")
+            continue
+        name = item.get("name")
+        if not name:
+            r.error(f"plugins[{i}].name is required")
+            continue
+        if name in seen_names:
+            r.warn(f"plugins: duplicate entry for plugin '{name}'")
+        seen_names.add(name)
+
+        port = item.get("webhook_in_port")
+        if port is not None and (not isinstance(port, int) or not (1 <= port <= 65535)):
+            r.error(f"plugins[{i}] ({name}): webhook_in_port must be an integer 1–65535, got: {port!r}")
+
+        if name not in installed_names:
+            r.warn(
+                f"plugins[{i}] references '{name}' which is not installed "
+                "(no matching pace.plugins.* entry point found); "
+                "run: pip install <plugin-package>"
+            )
+
+    # Check installed plugins for PACE version compatibility
+    for ep_group in _PLUGIN_GROUPS:
+        try:
+            for ep in entry_points(group=ep_group):
+                try:
+                    klass = ep.load()
+                    instance = klass()
+                    m = instance.manifest()
+                    if not _ver_compat(PACE_VERSION, m.pace_version_min, m.pace_version_max):
+                        r.warn(
+                            f"Installed plugin '{m.name}' requires PACE "
+                            f"{m.pace_version_min}"
+                            + (f"–{m.pace_version_max}" if m.pace_version_max else "+")
+                            + f" but PACE_VERSION is {PACE_VERSION}; "
+                            "plugin will be skipped at runtime"
+                        )
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+
 def _validate_cron(raw: dict, r: ConfigTestResult) -> None:
     cron = raw.get("cron")
     if cron is None:
@@ -455,6 +542,7 @@ def run_config_test(config_file: Path = CONFIG_FILE) -> ConfigTestResult:
     _validate_forge(raw, r)
     _validate_cost_control(raw, r)
     _validate_notifications(raw, r)
+    _validate_plugins(raw, r)
     _validate_cron(raw, r)
     _validate_reporter(raw, r)
 
