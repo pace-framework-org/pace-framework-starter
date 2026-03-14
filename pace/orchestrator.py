@@ -49,6 +49,7 @@ from alert_engine import AlertEngine
 from config import load_config
 from platforms import get_ci_adapter, get_tracker_adapter
 from platforms.base import CIAdapter, TrackerAdapter
+from plugins.loader import PluginRegistry, load_all as load_plugins
 from reporter import write_job_summary, update_progress_md
 import spend_tracker
 
@@ -537,9 +538,10 @@ def _run_day_zero(plan: dict, replan: bool = False) -> None:
 
 
 def main() -> None:
-    # Mutable containers so closures can reference platform/alert-engine after they're created.
+    # Mutable containers so closures can reference platform/alert-engine/plugins after they're created.
     _platform_ref: list["CIAdapter | None"] = [None]
     _alert_engine_ref: list["AlertEngine | None"] = [None]
+    _plugin_registry_ref: list[PluginRegistry | None] = [None]
 
     def _flush_spend() -> None:
         cost = spend_tracker.total_usd()
@@ -547,7 +549,14 @@ def main() -> None:
             print(f"[PACE] API usage this run:\n{spend_tracker.summary()}")
             _update_daily_spend(cost, _platform_ref[0], _alert_engine_ref[0])
 
+    def _pipeline_end() -> None:
+        reg = _plugin_registry_ref[0]
+        if reg:
+            reg.fire_hook("pipeline_end", {})
+            reg.shutdown()
+
     atexit.register(_flush_spend)
+    atexit.register(_pipeline_end)
 
     # Always release the pipeline lock on exit, regardless of outcome (Item 8)
     from preflight import release_pipeline_lock
@@ -580,6 +589,11 @@ def main() -> None:
     # v2.0 Sprint/Release branching model: ensure branch hierarchy exists for this sprint day.
     cfg_main = load_config()
     _alert_engine_ref[0] = AlertEngine(cfg_main)
+
+    # v2.1 Plugin System: discover and load all installed plugins (Item 10).
+    _plugin_registry = load_plugins(cfg_main)
+    _plugin_registry_ref[0] = _plugin_registry
+    _plugin_registry.fire_hook("pipeline_start", {"day": day})
 
     if cfg_main.release:
         from branching import get_branching_adapter, current_sprint_num
@@ -614,6 +628,7 @@ def main() -> None:
         sys.exit(0)
 
     recent_gates = get_recent_gate_reports(day)
+    _plugin_registry.fire_hook("day_start", {"day": day, "target": day_plan.get("target", "")})
     try:
         shipped, _last_hold_reason = run_cycle(day, day_plan, recent_gates, ci, tracker)
     except CycleAbortError as exc:
@@ -631,6 +646,7 @@ def main() -> None:
         (day_dir / "escalated").touch()
         tracker.open_escalation_issue(day, day_dir, hold_reason=_last_hold_reason)
         _alert_engine_ref[0].fire("hold_opened", {"day": day, "reason": _last_hold_reason})
+        _plugin_registry.fire_hook("day_held", {"day": day, "reason": _last_hold_reason})
         ci.set_variable("PACE_PAUSED", "true")
         write_job_summary(day, "HOLD", _load_story(day_dir), gate_report, sentinel_report, conduit_report, ci=ci)
         update_progress_md(day)
@@ -644,6 +660,7 @@ def main() -> None:
     commit_artifact(PROGRESS_FILE, f"Day {day}: PROGRESS.md update — SHIP")
     print(f"[PACE] === Day {day} complete — SHIPPED ===")
     _alert_engine_ref[0].fire("story_shipped", {"day": day})
+    _plugin_registry.fire_hook("day_shipped", {"day": day})
     # Tracker artifact push — best-effort, never blocks the pipeline
     try:
         tracker.update_story_status(day, day_dir, "done")
