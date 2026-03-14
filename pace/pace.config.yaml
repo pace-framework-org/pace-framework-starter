@@ -211,6 +211,56 @@ cost_control:
   max_story_cost_usd: 1.50
 
 # ---------------------------------------------------------------------------
+# Notifications — channel credentials for alert delivery (v2.0 Item 5)
+# ---------------------------------------------------------------------------
+# Configure one or more channels here. Values may use ${ENV_VAR} syntax to
+# read secrets from environment variables rather than committing them.
+#
+# notifications:
+#   slack:
+#     webhook_url: "${SLACK_WEBHOOK_URL}"   # Slack Incoming Webhook URL
+#
+#   teams:
+#     webhook_url: "${TEAMS_WEBHOOK_URL}"   # Microsoft Teams Incoming Webhook URL
+#
+#   email:
+#     smtp_host: "smtp.example.com"
+#     smtp_port: 587                        # 587 (STARTTLS, default) | 465 (SSL) | 25
+#     smtp_user: "alerts@example.com"       # omit for unauthenticated relay
+#     smtp_password: "${SMTP_PASSWORD}"     # omit for unauthenticated relay
+#     from_addr: "PACE Alerts <alerts@example.com>"
+#     to_addrs:
+#       - "team@example.com"
+#       - "oncall@example.com"
+
+# ---------------------------------------------------------------------------
+# Alert rules — map pipeline events to notification channels (v2.0 Item 5)
+# ---------------------------------------------------------------------------
+# Each rule specifies an event name, a list of channels (from notifications:
+# above), and optional numeric thresholds. Rules are evaluated in order.
+#
+# Supported events:
+#   hold_opened          — FORGE exhausted retries; escalation issue was opened
+#   story_shipped        — all agents passed; cycle.md written
+#   cost_exceeded        — daily accumulated spend crossed threshold_usd
+#   pipeline_lock_timeout — preflight detected a live concurrent pipeline run
+#   update_available     — updater.py detected a newer PACE version
+#
+# alerts:
+#   - event: hold_opened
+#     channels: [slack, teams]
+#
+#   - event: story_shipped
+#     channels: [slack]
+#
+#   - event: cost_exceeded
+#     channels: [email]
+#     threshold_usd: 5.00        # only fire when daily spend >= $5.00
+#
+#   - event: pipeline_lock_timeout
+#     channels: [slack]
+
+# ---------------------------------------------------------------------------
 # FORGE agent behaviour
 # ---------------------------------------------------------------------------
 forge:

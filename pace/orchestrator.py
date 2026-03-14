@@ -45,6 +45,7 @@ from advisory import (
     clear_advisory_items,
     format_backlog_for_forge,
 )
+from alert_engine import AlertEngine
 from config import load_config
 from platforms import get_ci_adapter, get_tracker_adapter
 from platforms.base import CIAdapter, TrackerAdapter
@@ -122,7 +123,7 @@ def _record_run_attempt(day: int, day_dir: Path, outcome: str, hold_reason: str)
     commit_artifact(attempts_file, f"Day {day}: attempt {len(records)} — {outcome} (${entry['cost_usd']:.4f})")
 
 
-def _update_daily_spend(run_cost_usd: float, ci: "CIAdapter | None" = None) -> None:
+def _update_daily_spend(run_cost_usd: float, ci: "CIAdapter | None" = None, alert_engine: "AlertEngine | None" = None) -> None:
     """Accumulate this run's cost into PACE_DAILY_SPEND via the CI adapter.
 
     PACE_SPEND_TODAY is injected by pace.yml's budget-check step and holds the
@@ -140,6 +141,8 @@ def _update_daily_spend(run_cost_usd: float, ci: "CIAdapter | None" = None) -> N
         ci.set_variable("PACE_DAILY_SPEND", f"{new_total:.4f}")
         ci.set_variable("PACE_DAILY_SPEND_DATE", today)
     print(f"[PACE] Daily spend updated: ${new_total:.4f} (this run: ${run_cost_usd:.4f})")
+    if alert_engine is not None:
+        alert_engine.fire("cost_exceeded", {"cost_usd": new_total, "run_cost_usd": run_cost_usd, "date": today})
 
 
 def _scope_check(story_card: dict, analysis_model: str) -> dict:
@@ -524,14 +527,15 @@ def _run_day_zero(plan: dict, replan: bool = False) -> None:
 
 
 def main() -> None:
-    # Mutable container so the spend flush closure can reference platform after it's created.
+    # Mutable containers so closures can reference platform/alert-engine after they're created.
     _platform_ref: list["CIAdapter | None"] = [None]
+    _alert_engine_ref: list["AlertEngine | None"] = [None]
 
     def _flush_spend() -> None:
         cost = spend_tracker.total_usd()
         if cost > 0:
             print(f"[PACE] API usage this run:\n{spend_tracker.summary()}")
-            _update_daily_spend(cost, _platform_ref[0])
+            _update_daily_spend(cost, _platform_ref[0], _alert_engine_ref[0])
 
     atexit.register(_flush_spend)
 
@@ -565,6 +569,8 @@ def main() -> None:
 
     # v2.0 Sprint/Release branching model: ensure branch hierarchy exists for this sprint day.
     cfg_main = load_config()
+    _alert_engine_ref[0] = AlertEngine(cfg_main)
+
     if cfg_main.release:
         from branching import get_branching_adapter, current_sprint_num
         sprint_num = current_sprint_num(day, cfg_main.release.sprint_days)
@@ -614,6 +620,7 @@ def main() -> None:
         print(f"[PACE] Day {day}: Pipeline exhausted retries — opening escalation issue...")
         (day_dir / "escalated").touch()
         tracker.open_escalation_issue(day, day_dir, hold_reason=_last_hold_reason)
+        _alert_engine_ref[0].fire("hold_opened", {"day": day, "reason": _last_hold_reason})
         ci.set_variable("PACE_PAUSED", "true")
         write_job_summary(day, "HOLD", _load_story(day_dir), gate_report, sentinel_report, conduit_report, ci=ci)
         update_progress_md(day)
@@ -626,6 +633,7 @@ def main() -> None:
     update_progress_md(day)
     commit_artifact(PROGRESS_FILE, f"Day {day}: PROGRESS.md update — SHIP")
     print(f"[PACE] === Day {day} complete — SHIPPED ===")
+    _alert_engine_ref[0].fire("story_shipped", {"day": day})
     sys.exit(0)
 
 
