@@ -2,7 +2,7 @@
 
 **Author:** Vivek Meehnia
 **Started:** 2026-03-13 (IST — Asia/Kolkata)
-**Log Version:** 1.2
+**Log Version:** 1.3
 **Aligned With:** ROADMAP v1.2
 
 ---
@@ -14,6 +14,7 @@
 | 1.0 | 2026-03-13 | Phase 1 entries: Items 9, 1, 2 |
 | 1.1 | 2026-03-13 | Phase 2 entries added: Items 3, 4, 8; Post-PR fixes for Item 4 |
 | 1.2 | 2026-03-14 | Variations from Plan sections added to all implemented items; CC-7 branch-rebase entry; log aligned with ROADMAP v1.2 |
+| 1.3 | 2026-03-14 | All Phase 1 and Phase 2 PRs confirmed merged to main; Item 9 (PR #1) and Item 8 (PR #6) merged; Phase 3 next |
 
 ---
 
@@ -29,7 +30,7 @@ This log records every code change, architectural decision, trade-off, and devia
 
 **Branch:** `phase1/item-9-config-tester`
 **PR:** #1
-**Status:** Open (pending review)
+**Status:** Merged
 
 #### Changes
 
@@ -87,7 +88,7 @@ The `_validate_cron` validator references the `cron` config section introduced b
 
 **Branch:** `phase1/item-1-branching-model`
 **PR:** #2
-**Status:** Open (pending review)
+**Status:** Merged
 
 #### Changes
 
@@ -161,7 +162,7 @@ Rationale: CI operations (PR reviews, CI polling, variable setting) and branchin
 
 **Branch:** `phase1/item-2-pace-planner`
 **PR:** #3
-**Status:** Open (pending review)
+**Status:** Merged
 
 #### Changes
 
@@ -264,7 +265,7 @@ The GitHub REST API returns 422 when a branch ref or PR already exists. All thre
 
 **Branch:** `phase2/item-3-context-versioning`
 **PR:** #4
-**Status:** Open (pending review)
+**Status:** Merged
 
 #### Item 3: Files Changed
 
@@ -312,7 +313,7 @@ Rationale: A calendar date gives no ordering information between multiple re-pla
 
 **Branch:** `phase2/item-4-auto-update`
 **PR:** #5
-**Status:** Open (pending review)
+**Status:** Merged
 
 #### Item 4: Files Changed
 
@@ -401,7 +402,7 @@ updates: UpdatesConfig = None          # from Item 4 (post_init default)
 
 **Branch:** `phase2/item-8-cron-config`
 **PR:** #6
-**Status:** Open (pending review)
+**Status:** Merged
 
 #### Item 8: Files Changed
 
@@ -496,16 +497,21 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 
 ---
 
+## Merged to Main
+
+| Item | PR | Merged |
+| ---- | -- | ------ |
+| Item 9 (Config Tester) | #1 | ✅ 2026-03-14 |
+| Item 1 (Branching Model) | #2 | ✅ 2026-03-14 |
+| Item 2 (PACE Planner) | #3 | ✅ 2026-03-14 |
+| Item 3 (Context Versioning) | #4 | ✅ 2026-03-14 |
+| Item 4 (Auto-Update) | #5 | ✅ 2026-03-14 |
+| Item 8 (Cron Config) | #6 | ✅ 2026-03-14 |
+
 ## Pending Work
 
 | Item | Status | Next Action |
 | ---- | ------ | ----------- |
-| Item 9 (Config Tester) | PR #1 open | Review and merge |
-| Item 1 (Branching Model) | PR #2 open | Review and merge |
-| Item 2 (PACE Planner) | PR #3 open | Review and merge |
-| Item 3 (Context Versioning) | PR #4 open | Review and merge |
-| Item 4 (Auto-Update) | PR #5 open | Review and merge |
-| Item 8 (Cron Config) | PR #6 open | Review and merge |
 | Items 5, 6, 7 (Phase 3) | Not started | See ROADMAP Phase 3 (`@Since v2.0-rc`) |
 | Item 10 (Phase 4) | Not started | See ROADMAP Phase 4 (`@Since v2.1`) |
 | Item 1 deferred steps (5–6) | Not started | Staging CI gate + branch-protection checks |
@@ -517,5 +523,5 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 
 ---
 
-*ROADMAP Execution Log v1.2 — 2026-03-14 IST (Variations from Plan added; log aligned with ROADMAP v1.2)*
+*ROADMAP Execution Log v1.3 — 2026-03-14 IST (All Phase 1 + Phase 2 PRs confirmed merged; Phase 3 is next)*
 *Author: Vivek Meehnia*
