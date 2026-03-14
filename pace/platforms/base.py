@@ -98,6 +98,23 @@ class CIAdapter(ABC):
         """
         return False
 
+    def get_variable(self, name: str) -> str | None:
+        """Read a CI/CD pipeline variable by name.
+
+        Default implementation reads from the process environment, which works
+        for all platforms where the CI system injects variables as env vars
+        before launching the job (GitHub Actions ``vars.*``, GitLab CI/CD
+        variables, Bitbucket repository variables, Jenkins parameters).
+
+        Adapters that also persist variables to a file or external store
+        (e.g. Local, Jenkins) override this to read from that store first.
+
+        Returns:
+            The variable value as a string, or None if not found.
+        """
+        import os
+        return os.environ.get(name)
+
 
 class TrackerAdapter(ABC):
     """Abstract interface for sprint-tracker / issue-platform integrations.

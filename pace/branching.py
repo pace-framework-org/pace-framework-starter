@@ -158,8 +158,20 @@ def get_branching_adapter() -> BranchingAdapter:
             token=os.environ.get("GITHUB_TOKEN", ""),
             repo_name=os.environ.get("GITHUB_REPOSITORY", ""),
         )
-    # GitLab and Bitbucket adapters are registered in their respective platform
-    # modules and will be wired here in the platform finalization phase (Item 7).
+    if cfg.ci_type == "gitlab":
+        from platforms.gitlab import GitLabBranchingAdapter
+        return GitLabBranchingAdapter(
+            url=os.environ.get("GITLAB_URL", "https://gitlab.com"),
+            token=os.environ.get("GITLAB_TOKEN", ""),
+            project=os.environ.get("GITLAB_PROJECT", ""),
+        )
+    if cfg.ci_type == "bitbucket":
+        from platforms.bitbucket import BitbucketBranchingAdapter
+        return BitbucketBranchingAdapter(
+            token=os.environ.get("BITBUCKET_API_TOKEN", ""),
+            workspace=os.environ.get("BITBUCKET_WORKSPACE", ""),
+            repo_slug=os.environ.get("BITBUCKET_REPO_SLUG", ""),
+        )
     print(
         f"[Branching] No BranchingAdapter implemented for platform '{cfg.ci_type}' — "
         "using local no-op adapter."
