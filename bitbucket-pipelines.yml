@@ -1,0 +1,85 @@
+# PACE Daily Cycle — Bitbucket Pipelines
+#
+# This file is managed by PACE ci_generator.py.
+# To change the schedule, update the `cron:` section in pace/pace.config.yaml
+# and run:  python pace/ci_generator.py --apply
+#
+# Required Repository Variables (Repository Settings → Pipelines → Repository variables):
+#   ANTHROPIC_API_KEY     — Anthropic API key (mark as Secured)
+#   BITBUCKET_API_TOKEN   — Repository access token (mark as Secured)
+#   BITBUCKET_WORKSPACE   — workspace slug (e.g. "myteam")
+#   BITBUCKET_REPO_SLUG   — repository slug (e.g. "my-service")
+#
+# Optional Repository Variables:
+#   PACE_DAY              — current sprint day (set manually or via automation)
+#   PACE_PAUSED           — "true" to pause the loop after a HOLD
+#   PACE_DAILY_BUDGET     — daily cost cap in USD (e.g. "5.00"; 0 or empty = no cap)
+#   PACE_DAILY_SPEND      — accumulated daily spend (updated by PACE each run)
+#   PACE_DAILY_SPEND_DATE — date of PACE_DAILY_SPEND; auto-reset when stale
+#   PACE_REPORTER_TIMEZONE — IANA timezone (default: "UTC")
+
+image: python:3.12-slim
+
+definitions:
+  steps:
+    - step: &setup-and-validate
+        name: Setup & Validate
+        caches:
+          - pip
+        script:
+          - git config user.name "PACE Orchestrator"
+          - git config user.email "pace@bitbucket.org"
+          - pip install -r pace/requirements.txt --quiet
+          - python pace/config_tester.py
+
+    - step: &pace-cycle
+        name: PACE Daily Cycle
+        caches:
+          - pip
+        script:
+          - pip install -r pace/requirements.txt --quiet
+          # Budget guard
+          - |
+            TODAY=$(TZ="${PACE_REPORTER_TIMEZONE:-UTC}" date +%Y-%m-%d)
+            BUDGET="${PACE_DAILY_BUDGET:-0}"
+            SPEND="${PACE_DAILY_SPEND:-0}"
+            if [ "${PACE_DAILY_SPEND_DATE:-}" != "$TODAY" ]; then
+              SPEND="0"
+            fi
+            export PACE_SPEND_TODAY="$SPEND"
+            if [ "$BUDGET" != "0" ] && [ -n "$BUDGET" ]; then
+              if python3 -c "import sys; sys.exit(0 if float('$SPEND') >= float('$BUDGET') else 1)"; then
+                echo "[PACE] Daily budget exceeded. Skipping."
+                exit 0
+              fi
+            fi
+          - python pace/orchestrator.py
+        artifacts:
+          - .pace/**
+          - PROGRESS.md
+
+pipelines:
+  # ---------------------------------------------------------------------------
+  # Scheduled daily run — edit the cron expression via pace.config.yaml +
+  # ci_generator.py --apply, then update the schedule in Bitbucket repository
+  # settings (Repository Settings → Pipelines → Schedules).
+  # ---------------------------------------------------------------------------
+  custom:
+    pace-daily:
+      - step: *setup-and-validate
+      - step: *pace-cycle
+
+  # ---------------------------------------------------------------------------
+  # Weekly re-plan (Day 0)
+  # Set PACE_DAY=0 and PACE_REPLAN=false|true in the custom run parameters.
+  # ---------------------------------------------------------------------------
+    pace-planner:
+      - step:
+          name: PACE Planner (Day 0)
+          caches:
+            - pip
+          script:
+            - pip install -r pace/requirements.txt --quiet
+            - PACE_DAY=0 python pace/orchestrator.py
+          artifacts:
+            - .pace/day-0/**

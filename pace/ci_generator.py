@@ -1,13 +1,13 @@
-"""PACE CI Generator (ROADMAP Item 8 — Cron Configuration).
+"""PACE CI Generator (ROADMAP Items 7+8 — Platform Finalization + Cron Configuration).
 
 Reads the `cron` section from pace.config.yaml and regenerates the cron
 schedule fields in CI workflow files so teams only need to edit one place.
 
 Supported platforms (determined by platform.ci in config):
-    github   — .github/workflows/pace.yml + .github/workflows/pace-planner.yml
-    gitlab   — .gitlab-ci.yml  (stub)
-    jenkins  — Jenkinsfile     (stub)
-    bitbucket — bitbucket-pipelines.yml (stub)
+    github    — .github/workflows/pace.yml + .github/workflows/pace-planner.yml
+    gitlab    — .gitlab-ci.yml
+    jenkins   — Jenkinsfile
+    bitbucket — bitbucket-pipelines.yml
 
 Usage:
     python pace/ci_generator.py              # preview changes (dry run)
@@ -34,22 +34,17 @@ def _load_config():
 
 
 # ---------------------------------------------------------------------------
-# GitHub Actions helpers
+# Generic single-regex cron update helper
 # ---------------------------------------------------------------------------
 
-_GITHUB_PACE_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pace.yml"
-_GITHUB_PLANNER_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pace-planner.yml"
-
-# Regex that matches the schedule block inside a GitHub Actions workflow.
-# Captures the indentation and the existing cron expression so we can replace it.
-_GHA_SCHEDULE_RE = re.compile(
-    r"(  schedule:\n    - cron: \")([^\"]+)(\")",
-    re.MULTILINE,
-)
-
-
-def _update_gha_cron(file: Path, new_cron: str, dry_run: bool = True) -> tuple[bool, str]:
-    """Replace the schedule.cron value in a GitHub Actions workflow file.
+def _update_cron_in_file(
+    file: Path,
+    pattern: re.Pattern,
+    new_cron: str,
+    group_index: int,
+    dry_run: bool = True,
+) -> tuple[bool, str]:
+    """Find *pattern* in *file* and replace group *group_index* with *new_cron*.
 
     Returns (changed: bool, message: str).
     """
@@ -57,23 +52,127 @@ def _update_gha_cron(file: Path, new_cron: str, dry_run: bool = True) -> tuple[b
         return False, f"[ci_generator] {file.name} not found — skipping."
 
     content = file.read_text()
-    match = _GHA_SCHEDULE_RE.search(content)
+    match = pattern.search(content)
     if not match:
-        return False, f"[ci_generator] {file.name}: no schedule block found — skipping."
+        return False, f"[ci_generator] {file.name}: no schedule pattern found — skipping."
 
-    old_cron = match.group(2)
+    old_cron = match.group(group_index)
     if old_cron == new_cron:
         return False, f"[ci_generator] {file.name}: cron already up to date ({new_cron})."
 
-    new_content = _GHA_SCHEDULE_RE.sub(
-        lambda m: m.group(1) + new_cron + m.group(3),
-        content,
-    )
+    def _replacer(m):
+        start, end = m.span(group_index)
+        offset = m.start()
+        return m.group(0)[: start - offset] + new_cron + m.group(0)[end - offset :]
+
+    new_content = pattern.sub(_replacer, content, count=1)
     if not dry_run:
         file.write_text(new_content)
 
     action = "would update" if dry_run else "updated"
     return True, f"[ci_generator] {file.name}: {action} cron  {old_cron!r} → {new_cron!r}"
+
+
+# ---------------------------------------------------------------------------
+# GitHub Actions
+# ---------------------------------------------------------------------------
+
+_GITHUB_PACE_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pace.yml"
+_GITHUB_PLANNER_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pace-planner.yml"
+
+# Matches: - cron: "0 9 * * 1-5"
+_GHA_SCHEDULE_RE = re.compile(
+    r"(  schedule:\n    - cron: \")([^\"]+)(\")",
+    re.MULTILINE,
+)
+
+
+def _update_gha_cron(file: Path, new_cron: str, dry_run: bool = True) -> tuple[bool, str]:
+    """Replace the schedule.cron value in a GitHub Actions workflow file."""
+    if not file.exists():
+        return False, f"[ci_generator] {file.name} not found — skipping."
+    content = file.read_text()
+    match = _GHA_SCHEDULE_RE.search(content)
+    if not match:
+        return False, f"[ci_generator] {file.name}: no schedule block found — skipping."
+    old_cron = match.group(2)
+    if old_cron == new_cron:
+        return False, f"[ci_generator] {file.name}: cron already up to date ({new_cron})."
+    new_content = _GHA_SCHEDULE_RE.sub(
+        lambda m: m.group(1) + new_cron + m.group(3), content, count=1
+    )
+    if not dry_run:
+        file.write_text(new_content)
+    action = "would update" if dry_run else "updated"
+    return True, f"[ci_generator] {file.name}: {action} cron  {old_cron!r} → {new_cron!r}"
+
+
+# ---------------------------------------------------------------------------
+# GitLab CI (.gitlab-ci.yml)
+# ---------------------------------------------------------------------------
+
+_GITLAB_CI_FILE = _REPO_ROOT / ".gitlab-ci.yml"
+
+
+def _update_gitlab_cron(file: Path, new_cron: str, dry_run: bool = True) -> tuple[bool, str]:
+    """GitLab schedules are managed in the UI; emit an informational message."""
+    if not file.exists():
+        return False, f"[ci_generator] {file.name} not found — skipping."
+    return False, (
+        f"[ci_generator] {file.name}: GitLab schedules are managed in the GitLab UI "
+        f"(CI/CD → Schedules). Configure your pipeline schedule to run: {new_cron!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Jenkins (Jenkinsfile)
+# ---------------------------------------------------------------------------
+
+_JENKINSFILE = _REPO_ROOT / "Jenkinsfile"
+
+# Matches: cron('0 9 * * 1-5')  (8-space indent inside triggers block)
+_JENKINS_CRON_RE = re.compile(
+    r"(        cron\(')([^']+)('\))",
+    re.MULTILINE,
+)
+
+
+def _update_jenkins_cron(file: Path, new_cron: str, dry_run: bool = True) -> tuple[bool, str]:
+    """Replace the cron expression inside the Jenkinsfile triggers block."""
+    if not file.exists():
+        return False, f"[ci_generator] {file.name} not found — skipping."
+    content = file.read_text()
+    match = _JENKINS_CRON_RE.search(content)
+    if not match:
+        return False, f"[ci_generator] {file.name}: no cron() trigger found — skipping."
+    old_cron = match.group(2)
+    if old_cron == new_cron:
+        return False, f"[ci_generator] {file.name}: cron already up to date ({new_cron})."
+    new_content = _JENKINS_CRON_RE.sub(
+        lambda m: m.group(1) + new_cron + m.group(3), content, count=1
+    )
+    if not dry_run:
+        file.write_text(new_content)
+    action = "would update" if dry_run else "updated"
+    return True, f"[ci_generator] {file.name}: {action} cron  {old_cron!r} → {new_cron!r}"
+
+
+# ---------------------------------------------------------------------------
+# Bitbucket Pipelines (bitbucket-pipelines.yml)
+# ---------------------------------------------------------------------------
+
+_BITBUCKET_PIPELINES_FILE = _REPO_ROOT / "bitbucket-pipelines.yml"
+
+
+def _update_bitbucket_cron(file: Path, new_cron: str, dry_run: bool = True) -> tuple[bool, str]:
+    """Bitbucket schedules are managed in the repository UI; emit an informational message."""
+    if not file.exists():
+        return False, f"[ci_generator] {file.name} not found — skipping."
+    return False, (
+        f"[ci_generator] {file.name}: Bitbucket schedules are managed in "
+        f"Repository Settings → Pipelines → Schedules. "
+        f"Configure your schedule to run: {new_cron!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -94,9 +193,9 @@ def generate(apply: bool = False, check: bool = False) -> bool:
     messages: list[str] = []
 
     if ci == "github":
-        for workflow_file, cron_expr, label in [
-            (_GITHUB_PACE_WORKFLOW, cron.pace_pipeline, "pace.yml"),
-            (_GITHUB_PLANNER_WORKFLOW, cron.planner_pipeline, "pace-planner.yml"),
+        for workflow_file, cron_expr in [
+            (_GITHUB_PACE_WORKFLOW, cron.pace_pipeline),
+            (_GITHUB_PLANNER_WORKFLOW, cron.planner_pipeline),
         ]:
             changed, msg = _update_gha_cron(workflow_file, cron_expr, dry_run=not apply)
             messages.append(msg)
@@ -104,19 +203,24 @@ def generate(apply: bool = False, check: bool = False) -> bool:
                 all_in_sync = False
 
     elif ci == "gitlab":
-        messages.append(
-            "[ci_generator] GitLab CI generator not yet implemented — see ROADMAP Item 7."
-        )
+        changed, msg = _update_gitlab_cron(_GITLAB_CI_FILE, cron.pace_pipeline, dry_run=not apply)
+        messages.append(msg)
+        # GitLab is always "in sync" — no file mutation; just advisory message
+        _ = changed
 
     elif ci == "jenkins":
-        messages.append(
-            "[ci_generator] Jenkins generator not yet implemented — see ROADMAP Item 7."
-        )
+        changed, msg = _update_jenkins_cron(_JENKINSFILE, cron.pace_pipeline, dry_run=not apply)
+        messages.append(msg)
+        if changed:
+            all_in_sync = False
 
     elif ci == "bitbucket":
-        messages.append(
-            "[ci_generator] Bitbucket Pipelines generator not yet implemented — see ROADMAP Item 7."
+        changed, msg = _update_bitbucket_cron(
+            _BITBUCKET_PIPELINES_FILE, cron.pace_pipeline, dry_run=not apply
         )
+        messages.append(msg)
+        # Bitbucket is always "in sync" — no file mutation; just advisory message
+        _ = changed
 
     else:
         messages.append(

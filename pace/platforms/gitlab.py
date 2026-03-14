@@ -24,6 +24,7 @@ except ImportError:
     _REQUESTS_AVAILABLE = False
 
 from platforms.base import CIAdapter, TrackerAdapter
+from branching import BranchingAdapter
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 
@@ -474,3 +475,84 @@ PACE could not resolve this HOLD after 2 retries. Human intervention required.
             print(f"[GitLab] Handoff comment posted to issue !{iid} (Day {day})")
         except Exception as e:
             print(f"[GitLab] post_handoff_comment failed: {e}")
+
+
+class GitLabBranchingAdapter(_GitLabBase, BranchingAdapter):
+    """Manages the release/sprint branch hierarchy via the GitLab Branches API."""
+
+    def get_branch_sha(self, branch: str) -> str | None:
+        """Return HEAD SHA of branch, or None if it doesn't exist."""
+        if not self._available:
+            return None
+        try:
+            resp = _requests.get(
+                self._project_api(f"repository/branches/{urllib.parse.quote(branch, safe='')}"),
+                headers=self._headers(),
+                timeout=15,
+            )
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.json()["commit"]["id"]
+        except Exception as e:
+            print(f"[GitLab] get_branch_sha({branch!r}): {e}")
+            return None
+
+    def create_branch(self, new_branch: str, from_branch: str) -> None:
+        """Create new_branch from from_branch. No-op if new_branch already exists."""
+        if not self._available:
+            print(f"[GitLab] Adapter not configured — skipping create_branch({new_branch!r})")
+            return
+        try:
+            resp = _requests.post(
+                self._project_api("repository/branches"),
+                headers=self._headers(),
+                json={"branch": new_branch, "ref": from_branch},
+                timeout=15,
+            )
+            if resp.status_code == 400 and "already exists" in resp.text:
+                print(f"[GitLab] Branch '{new_branch}' already exists — skipping")
+                return
+            resp.raise_for_status()
+            print(f"[GitLab] Branch created: {new_branch} (from {from_branch})")
+        except Exception as e:
+            print(f"[GitLab] create_branch({new_branch!r}): {e}")
+
+    def create_pull_request(
+        self,
+        head: str,
+        base: str,
+        title: str,
+        body: str,
+        labels: list[str] | None = None,
+    ) -> str:
+        """Open a Merge Request from head → base. Returns the MR web URL, or '' on failure."""
+        if not self._available:
+            print(f"[GitLab] Adapter not configured — skipping MR: {head} → {base}")
+            return ""
+        try:
+            payload: dict = {
+                "source_branch": head,
+                "target_branch": base,
+                "title": title,
+                "description": body,
+                "remove_source_branch": False,
+            }
+            if labels:
+                payload["labels"] = ",".join(labels)
+            resp = _requests.post(
+                self._project_api("merge_requests"),
+                headers=self._headers(),
+                json=payload,
+                timeout=15,
+            )
+            if resp.status_code == 409:
+                print(f"[GitLab] MR {head} → {base} already exists — skipping")
+                return ""
+            resp.raise_for_status()
+            url = resp.json().get("web_url", "")
+            print(f"[GitLab] MR opened: {url}")
+            return url
+        except Exception as e:
+            print(f"[GitLab] create_pull_request({head!r} → {base!r}): {e}")
+            return ""

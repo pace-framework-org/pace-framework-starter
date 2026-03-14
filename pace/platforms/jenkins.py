@@ -25,6 +25,8 @@ Limitations:
 
 from __future__ import annotations
 
+import json
+import os
 import time
 import yaml
 from pathlib import Path
@@ -201,6 +203,46 @@ with a Git hosting platform (GitHub/GitLab/Bitbucket) for review gating.
         out_file = _REPO_ROOT / "jenkins-summary.md"
         out_file.write_text(markdown)
         print(f"[Jenkins] Job summary written to: {out_file}")
+
+    # ------------------------------------------------------------------
+    # Variable management — persisted to jenkins-variables.json
+    # (Jenkins has no built-in runtime variable mutation API; file-based
+    #  persistence is the most portable approach for pipeline automation)
+    # ------------------------------------------------------------------
+
+    _VARIABLES_FILE = _REPO_ROOT / "jenkins-variables.json"
+
+    def set_variable(self, name: str, value: str) -> bool:
+        """Persist a named variable to jenkins-variables.json in the repo root."""
+        try:
+            existing: dict = (
+                json.loads(self._VARIABLES_FILE.read_text())
+                if self._VARIABLES_FILE.exists()
+                else {}
+            )
+        except (json.JSONDecodeError, OSError):
+            existing = {}
+        existing[name] = value
+        try:
+            self._VARIABLES_FILE.write_text(json.dumps(existing, indent=2))
+            print(f"[Jenkins] Variable {name!r} set to {value!r} in {self._VARIABLES_FILE.name}")
+            return True
+        except OSError as exc:
+            print(f"[Jenkins] set_variable failed: {exc}")
+            return False
+
+    def get_variable(self, name: str) -> str | None:
+        """Read a variable: environment first, then jenkins-variables.json."""
+        env_val = os.environ.get(name)
+        if env_val is not None:
+            return env_val
+        try:
+            if self._VARIABLES_FILE.exists():
+                data = json.loads(self._VARIABLES_FILE.read_text())
+                return data.get(name)
+        except (json.JSONDecodeError, OSError):
+            pass
+        return None
 
 
 # ------------------------------------------------------------------
