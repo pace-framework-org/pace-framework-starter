@@ -16,6 +16,7 @@ without coupling them together.
 
 from __future__ import annotations
 
+import yaml
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -138,3 +139,67 @@ class TrackerAdapter(ABC):
         Returns:
             URL of the opened issue/ticket, or empty string if unsupported / failed.
         """
+
+    @abstractmethod
+    def push_story(self, day: int, day_dir: Path) -> str:
+        """Create a story ticket in the tracker for the PRIME-generated story card.
+
+        Reads story.md from *day_dir* and creates a tracker issue/ticket.
+        Persists the ticket reference (URL + platform ID) to
+        ``day_dir/story-ticket.yaml`` so that :meth:`update_story_status`
+        and :meth:`post_handoff_comment` can locate the ticket.
+
+        Args:
+            day:     PACE day number.
+            day_dir: Path to .pace/day-N/ directory (contains story.md).
+
+        Returns:
+            URL of the created issue/ticket, or empty string if unsupported / failed.
+        """
+
+    @abstractmethod
+    def update_story_status(self, day: int, day_dir: Path, status: str) -> None:
+        """Transition the story ticket's status in the tracker.
+
+        Reads the ticket reference from ``day_dir/story-ticket.yaml``.
+        No-op (with a log message) if no ticket reference is found.
+
+        Args:
+            day:     PACE day number.
+            day_dir: Path to .pace/day-N/ directory.
+            status:  ``"done"`` (SHIP) or ``"in_progress"`` (FORGE started).
+        """
+
+    @abstractmethod
+    def post_handoff_comment(self, day: int, day_dir: Path) -> None:
+        """Post the final FORGE handoff note as a comment on the story ticket.
+
+        Reads handoff.md and the ticket reference from *day_dir*.
+        No-op (with a log message) if either file is missing.
+
+        Args:
+            day:     PACE day number.
+            day_dir: Path to .pace/day-N/ directory (contains handoff.md).
+        """
+
+    # ------------------------------------------------------------------
+    # Ticket-reference helpers (shared by all implementations)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _save_ticket_ref(day_dir: Path, data: dict) -> None:
+        """Persist ticket reference dict to ``day_dir/story-ticket.yaml``."""
+        (day_dir / "story-ticket.yaml").write_text(
+            yaml.dump(data, default_flow_style=False, allow_unicode=True)
+        )
+
+    @staticmethod
+    def _load_ticket_ref(day_dir: Path) -> dict:
+        """Load ticket reference from ``day_dir/story-ticket.yaml``. Returns {} if missing."""
+        f = day_dir / "story-ticket.yaml"
+        if not f.exists():
+            return {}
+        try:
+            return yaml.safe_load(f.read_text()) or {}
+        except Exception:
+            return {}

@@ -258,3 +258,101 @@ class JiraTrackerAdapter(TrackerAdapter):
         if url:
             print(f"[Jira] Advisory ticket opened: {url}")
         return url
+
+    # ------------------------------------------------------------------
+    # Story ticket
+    # ------------------------------------------------------------------
+
+    def push_story(self, day: int, day_dir: Path) -> str:
+        if not self._available:
+            print("[Jira] push_story: adapter not configured — skipping.")
+            return ""
+        story_file = day_dir / "story.md"
+        if not story_file.exists():
+            print(f"[Jira] push_story: story.md not found in {day_dir}")
+            return ""
+
+        from issue_template import story_body_adf
+        story_card = yaml.safe_load(story_file.read_text()) or {}
+        target = story_card.get("target", f"Day {day} story")
+        issue_type = os.environ.get("JIRA_STORY_ISSUE_TYPE", "Story")
+        url = self._create_issue(
+            summary=f"[PACE Day {day}] {target}",
+            description_adf=story_body_adf(day, story_card),
+            issue_type=issue_type,
+            labels=["pace-story", f"pace-day-{day}"],
+        )
+        if url:
+            key = url.split("/browse/")[-1] if "/browse/" in url else ""
+            self._save_ticket_ref(day_dir, {"url": url, "key": key, "platform": "jira"})
+            print(f"[Jira] Story ticket opened: {url}")
+        return url
+
+    def _find_transition_id(self, key: str, target_name: str) -> str | None:
+        """Return the first transition ID whose name contains *target_name* (case-insensitive)."""
+        try:
+            resp = _requests.get(
+                self._api(f"issue/{key}/transitions"),
+                auth=self._auth,
+                headers={"Accept": "application/json"},
+                timeout=10,
+            )
+            if not resp.ok:
+                return None
+            for t in resp.json().get("transitions", []):
+                if target_name.lower() in t.get("name", "").lower():
+                    return str(t["id"])
+        except Exception:
+            pass
+        return None
+
+    def update_story_status(self, day: int, day_dir: Path, status: str) -> None:
+        if not self._available:
+            return
+        ref = self._load_ticket_ref(day_dir)
+        key = ref.get("key")
+        if not key:
+            print(f"[Jira] update_story_status: no ticket reference for Day {day}")
+            return
+        target_name = "done" if status == "done" else "in progress"
+        transition_id = self._find_transition_id(key, target_name)
+        if not transition_id:
+            print(f"[Jira] update_story_status: could not find '{target_name}' transition for {key}")
+            return
+        try:
+            _requests.post(
+                self._api(f"issue/{key}/transitions"),
+                auth=self._auth,
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                json={"transition": {"id": transition_id}},
+                timeout=15,
+            )
+            print(f"[Jira] Story ticket {key} transitioned to '{target_name}' (Day {day})")
+        except Exception as e:
+            print(f"[Jira] update_story_status failed: {e}")
+
+    def post_handoff_comment(self, day: int, day_dir: Path) -> None:
+        if not self._available:
+            return
+        ref = self._load_ticket_ref(day_dir)
+        key = ref.get("key")
+        handoff_file = day_dir / "handoff.md"
+        if not key or not handoff_file.exists():
+            print(f"[Jira] post_handoff_comment: missing ref or handoff.md for Day {day}")
+            return
+        from issue_template import handoff_comment_adf
+        handoff = yaml.safe_load(handoff_file.read_text()) or {}
+        try:
+            resp = _requests.post(
+                self._api(f"issue/{key}/comment"),
+                auth=self._auth,
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                json={"body": handoff_comment_adf(day, handoff)},
+                timeout=15,
+            )
+            if resp.ok:
+                print(f"[Jira] Handoff comment posted to {key} (Day {day})")
+            else:
+                print(f"[Jira] post_handoff_comment failed: {resp.status_code} {resp.reason}")
+        except Exception as e:
+            print(f"[Jira] post_handoff_comment failed: {e}")

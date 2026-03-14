@@ -300,6 +300,16 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
         )
         print(f"[PACE] Day {day}: Story refined to {len(story_card.get('acceptance', []))} AC.")
 
+    # Push story to tracker once (before the FORGE retry loop). Idempotent — skipped if
+    # story-ticket.yaml already exists (e.g. on a retry run for the same day).
+    if not (day_dir / "story-ticket.yaml").exists():
+        try:
+            ticket_url = tracker.push_story(day, day_dir)
+            if ticket_url:
+                print(f"[PACE] Day {day}: Story ticket opened: {ticket_url}")
+        except Exception as exc:
+            print(f"[PACE] Day {day}: push_story failed (non-fatal): {exc}")
+
     open_backlog = load_open_backlog() if is_clearance_day else []
     if is_clearance_day and open_backlog:
         print(f"[PACE] Day {day}: Clearance day — {len(open_backlog)} open advisory item(s) to resolve.")
@@ -634,6 +644,12 @@ def main() -> None:
     commit_artifact(PROGRESS_FILE, f"Day {day}: PROGRESS.md update — SHIP")
     print(f"[PACE] === Day {day} complete — SHIPPED ===")
     _alert_engine_ref[0].fire("story_shipped", {"day": day})
+    # Tracker artifact push — best-effort, never blocks the pipeline
+    try:
+        tracker.update_story_status(day, day_dir, "done")
+        tracker.post_handoff_comment(day, day_dir)
+    except Exception as exc:
+        print(f"[PACE] Day {day}: Tracker SHIP updates failed (non-fatal): {exc}")
     sys.exit(0)
 
 

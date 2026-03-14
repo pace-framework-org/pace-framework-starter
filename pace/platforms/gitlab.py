@@ -394,3 +394,83 @@ PACE could not resolve this HOLD after 2 retries. Human intervention required.
         except Exception as e:
             print(f"[GitLab] Failed to open advisory issue: {e}")
             return ""
+
+    # ------------------------------------------------------------------
+    # Story ticket
+    # ------------------------------------------------------------------
+
+    def push_story(self, day: int, day_dir: Path) -> str:
+        if not self._available:
+            print("[GitLab] push_story: adapter not configured — skipping.")
+            return ""
+        story_file = day_dir / "story.md"
+        if not story_file.exists():
+            print(f"[GitLab] push_story: story.md not found in {day_dir}")
+            return ""
+
+        from issue_template import story_body_markdown
+        story_card = yaml.safe_load(story_file.read_text()) or {}
+        target = story_card.get("target", f"Day {day} story")
+        try:
+            resp = _requests.post(
+                self._project_api("issues"),
+                headers=self._headers(),
+                json={
+                    "title": f"[PACE Day {day}] {target}",
+                    "description": story_body_markdown(day, story_card),
+                    "labels": f"pace-story,pace-day-{day}",
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            url = data.get("web_url", "")
+            iid = data.get("iid")
+            self._save_ticket_ref(day_dir, {"url": url, "id": iid, "platform": "gitlab"})
+            print(f"[GitLab] Story ticket opened: {url}")
+            return url
+        except Exception as e:
+            print(f"[GitLab] push_story failed: {e}")
+            return ""
+
+    def update_story_status(self, day: int, day_dir: Path, status: str) -> None:
+        if not self._available:
+            return
+        ref = self._load_ticket_ref(day_dir)
+        iid = ref.get("id")
+        if not iid:
+            print(f"[GitLab] update_story_status: no ticket reference for Day {day}")
+            return
+        try:
+            state_event = "close" if status == "done" else "reopen"
+            _requests.put(
+                self._project_api(f"issues/{iid}"),
+                headers=self._headers(),
+                json={"state_event": state_event},
+                timeout=15,
+            )
+            print(f"[GitLab] Story issue !{iid} state_event → '{state_event}' (Day {day})")
+        except Exception as e:
+            print(f"[GitLab] update_story_status failed: {e}")
+
+    def post_handoff_comment(self, day: int, day_dir: Path) -> None:
+        if not self._available:
+            return
+        ref = self._load_ticket_ref(day_dir)
+        iid = ref.get("id")
+        handoff_file = day_dir / "handoff.md"
+        if not iid or not handoff_file.exists():
+            print(f"[GitLab] post_handoff_comment: missing ref or handoff.md for Day {day}")
+            return
+        from issue_template import handoff_comment_markdown
+        handoff = yaml.safe_load(handoff_file.read_text()) or {}
+        try:
+            _requests.post(
+                self._project_api(f"issues/{iid}/notes"),
+                headers=self._headers(),
+                json={"body": handoff_comment_markdown(day, handoff)},
+                timeout=15,
+            )
+            print(f"[GitLab] Handoff comment posted to issue !{iid} (Day {day})")
+        except Exception as e:
+            print(f"[GitLab] post_handoff_comment failed: {e}")
