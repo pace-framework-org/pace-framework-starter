@@ -302,8 +302,8 @@ class JiraTrackerAdapter(TrackerAdapter):
             for t in resp.json().get("transitions", []):
                 if target_name.lower() in t.get("name", "").lower():
                     return str(t["id"])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[Jira] _find_transition_id({key!r}, {target_name!r}): {e}")
         return None
 
     def update_story_status(self, day: int, day_dir: Path, status: str) -> None:
