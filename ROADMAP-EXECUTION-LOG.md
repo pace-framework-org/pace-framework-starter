@@ -1,8 +1,8 @@
 # PACE Framework — ROADMAP Execution Log
 
-**Author:** Vivek Meehnia
+**Author:** Vipul Meehnia
 **Started:** 2026-03-13 (IST — Asia/Kolkata)
-**Log Version:** 1.3
+**Log Version:** 1.4
 **Aligned With:** ROADMAP v1.2
 
 ---
@@ -15,6 +15,7 @@
 | 1.1 | 2026-03-13 | Phase 2 entries added: Items 3, 4, 8; Post-PR fixes for Item 4 |
 | 1.2 | 2026-03-14 | Variations from Plan sections added to all implemented items; CC-7 branch-rebase entry; log aligned with ROADMAP v1.2 |
 | 1.3 | 2026-03-14 | All Phase 1 and Phase 2 PRs confirmed merged to main; Item 9 (PR #1) and Item 8 (PR #6) merged; Phase 3 next |
+| 1.4 | 2026-03-14 | Phase 3 implemented: Item 5 (Communications & Alerting) merged; Items 6 (Tracker Artifacts) and 7 (Platform Finalization) PRs open |
 
 ---
 
@@ -32,10 +33,10 @@ This log records every code change, architectural decision, trade-off, and devia
 **PR:** #1
 **Status:** Merged
 
-#### Changes
+#### Item 9: Changes
 
 | File | Change Type | Description |
-|------|-------------|-------------|
+| ------ | ----------- | ----------- |
 | `pace/config_tester.py` | New | Full config validation CLI |
 | `.github/workflows/pace.yml` | Modified | Added `Validate PACE configuration` step before budget check |
 
@@ -51,10 +52,10 @@ This log records every code change, architectural decision, trade-off, and devia
 
 The step in `pace.yml` runs before the budget check — a config error stops the run before any API spend is incurred.
 
-#### Key Validators
+#### Item 9: Key Validators
 
 | Validator | What it checks |
-|-----------|---------------|
+| --------- | -------------- |
 | `_validate_product` | name/description not placeholder, github_org set |
 | `_validate_sprint` | `duration_days` in 1–365 |
 | `_validate_release` | `sprint_days` ≤ `release_days`, both > 0 |
@@ -65,7 +66,7 @@ The step in `pace.yml` runs before the budget check — a config error stops the
 | `_validate_cron` | 5-field cron regex, warns on sub-minute intervals |
 | `_validate_reporter` | IANA timezone check via `zoneinfo` |
 
-#### Architectural Decisions
+#### Item 9: Architectural Decisions
 
 **AD-9-1: Three-level severity instead of pass/fail**
 Rationale: A hard pass/fail check would block legitimate runs where config is valid but suboptimal. Warnings surface cost/performance concerns at validation time without blocking. Errors catch crashes before any API spend occurs.
@@ -90,19 +91,19 @@ The `_validate_cron` validator references the `cron` config section introduced b
 **PR:** #2
 **Status:** Merged
 
-#### Changes
+#### Item 1: Changes
 
 | File | Change Type | Description |
-|------|-------------|-------------|
+| ------ | ----------- | ----------- |
 | `pace/config.py` | Modified | `ReleaseConfig` dataclass; `release` field on `PaceConfig`; `load_config()` parsing |
 | `pace/branching.py` | New | `BranchingAdapter` ABC, helpers, `LocalBranchingAdapter`, factory |
 | `pace/platforms/github.py` | Modified | `GitHubBranchingAdapter` class |
 | `pace/orchestrator.py` | Modified | `ensure_hierarchy()` call before `run_cycle()` |
 | `pace/pace.config.yaml` | Modified | Commented-out `release:` section with inline docs |
 
-#### Branch Hierarchy
+#### Item 1: Branch Hierarchy
 
-```
+```text
 main
   └── staging          (created when release is first configured)
         └── release/<name>   (e.g. release/v2.0)
@@ -129,10 +130,11 @@ Sprint number is derived from: `sprint_num = ceil(day / sprint_days)`.
 - `rel/sprint/pace-N → release/<name>` (sprint close PR)
 
 At release end (day == release_days):
+
 - `release/<name> → staging` (release close PR)
 - `staging → main` (final promotion PR, opened by CONDUIT after staging CI passes)
 
-#### Architectural Decisions
+#### Item 1: Architectural Decisions
 
 **AD-1-1: Idempotent hierarchy creation**
 Rationale: The orchestrator calls `ensure_hierarchy()` every day. Any level may already exist from a previous run. A 422 "ref already exists" from the GitHub API is treated as a no-op, not an error.
@@ -164,16 +166,16 @@ Rationale: CI operations (PR reviews, CI polling, variable setting) and branchin
 **PR:** #3
 **Status:** Merged
 
-#### Changes
+#### Item 2: Changes
 
 | File | Change Type | Description |
-|------|-------------|-------------|
+| ------ | ----------- | ----------- |
 | `pace/planner.py` | Modified | `--pipeline` mode, `_collect_shipped_days()`, `_write_shipped_manifest()`, `run_pipeline()`, `__main__` CLI |
 | `.github/workflows/pace-planner.yml` | New | Standalone planner workflow |
 
 #### Pipeline Flow
 
-```
+```text
 workflow_dispatch (or schedule)
   ↓
 Validate config (config_tester.py)
@@ -197,13 +199,14 @@ Team sets PACE_PAUSED=false → daily cycle resumes
 #### Shipped-Days Protection
 
 When `--pipeline` runs, it scans `.pace/day-*/gate.md` for `gate_decision: SHIP`. Shipped days are:
+
 1. Recorded in `.pace/shipped.yaml`
 2. Preserved with their actual costs in `planner.md`
 3. Never re-estimated (actuals override predictions)
 
 This ensures a mid-sprint re-plan cannot revise or overwrite work already completed.
 
-#### Architectural Decisions
+#### Item 2: Architectural Decisions
 
 **AD-2-1: Pipeline mode vs Day 0 mode are separate code paths**
 Rationale: Day 0 mode (`PACE_DAY=0`) is called by the orchestrator synchronously as part of the main PACE cycle. Pipeline mode is an async, standalone workflow with different responsibilities (PR gate, PACE_PAUSED). Merging them would create a complex conditional that obscures both flows.
@@ -238,6 +241,7 @@ All Phase 1 feature branches (`phase1/item-*`) are branched from and PR'd back t
 ### CC-2: No breaking changes in Phase 1
 
 Every Phase 1 change is backward-compatible with v1.x configurations:
+
 - `config_tester.py` is a new optional tool — not required to run
 - `release:` in `pace.config.yaml` is optional — absent = no branching
 - `planner.py --pipeline` is a new mode — existing Day 0 behavior unchanged
@@ -252,7 +256,7 @@ The GitHub REST API returns 422 when a branch ref or PR already exists. All thre
 ## Pending Phase 1 Work
 
 | Item | Status | Next Action |
-|------|--------|-------------|
+| ---- | ------ | ----------- |
 | Item 9 (Config Tester) | PR #1 open | Review and merge |
 | Item 1 (Branching Model) | PR #2 open | Review and merge |
 | Item 2 (PACE Planner) | PR #3 open | Review and merge |
@@ -326,7 +330,7 @@ Rationale: A calendar date gives no ordering information between multiple re-pla
 
 #### Update Decision Tree
 
-```
+```text
 check_for_update()
     ↓ update_available?
     NO  → silent (no-op)
@@ -465,6 +469,222 @@ cron: CronConfig = None                # from Item 8 (post_init default)
 
 ---
 
+## Phase 3 — Reliability & Reach (v2.0-rc)
+
+### Item 5 — Communications & Alerting
+
+**Branch:** `phase3/item-5-notifications`
+**PR:** #7
+**Status:** Merged
+
+#### Item 5: Changes
+
+| File | Change Type | Description |
+| ---- | ----------- | ----------- |
+| `pace/notifications/__init__.py` | New | `get_notification_adapter()` factory |
+| `pace/notifications/base.py` | New | `NotificationAdapter` ABC + 5 event constants |
+| `pace/notifications/slack.py` | New | `SlackAdapter` — Incoming Webhook via `requests` |
+| `pace/notifications/teams.py` | New | `TeamsAdapter` — MessageCard format, color-coded by event |
+| `pace/notifications/email.py` | New | `EmailAdapter` — stdlib `smtplib`, STARTTLS, zero new deps |
+| `pace/alert_engine.py` | New | `AlertEngine` — evaluates rules, dispatches to channels |
+| `pace/config.py` | Modified | `SlackConfig`, `TeamsConfig`, `EmailConfig`, `NotificationsConfig`, `AlertRuleConfig`; `_interpolate_env()`; `_parse_notifications()`, `_parse_alerts()` wired into `load_config()` |
+| `pace/pace.config.yaml` | Modified | `notifications:` and `alerts:` sections added (commented examples) |
+| `pace/orchestrator.py` | Modified | `AlertEngine` instantiated in `main()`; `fire()` at `hold_opened`, `story_shipped`, `cost_exceeded` |
+| `pace/preflight.py` | Modified | `pipeline_lock_timeout` fired before `RuntimeError` in `acquire_pipeline_lock()` |
+| `pace/config_tester.py` | Modified | `_validate_notifications()` — channel credential checks, alert rule event validation |
+
+#### Architecture: NotificationAdapter ABC
+
+Follows the same pattern as `CIAdapter` / `TrackerAdapter`:
+
+```python
+class NotificationAdapter(ABC):
+    @abstractmethod
+    def send(self, event: str, payload: dict) -> bool: ...
+```
+
+Each adapter (`SlackAdapter`, `TeamsAdapter`, `EmailAdapter`) is self-contained with per-event message templates. `AlertEngine` is the orchestrating layer — it holds the rule list from config, builds adapters once at startup, and routes `fire(event, payload)` calls to the appropriate channels.
+
+#### Alert Events
+
+| Constant | When fired |
+| -------- | ---------- |
+| `hold_opened` | After `tracker.open_escalation_issue()` in `orchestrator.py` |
+| `story_shipped` | After `=== SHIPPED ===` print in `orchestrator.py` |
+| `cost_exceeded` | Inside `_update_daily_spend()` atexit callback |
+| `pipeline_lock_timeout` | Before `RuntimeError` in `preflight.acquire_pipeline_lock()` |
+| `update_available` | Wired in `updater.py` for future use |
+
+#### Threshold Guards
+
+`AlertRuleConfig` supports optional `threshold_usd` and `threshold_minutes`. `AlertEngine._threshold_met()` checks these against the event payload — a `cost_exceeded` rule with `threshold_usd: 5.0` only fires when `payload["cost_usd"] >= 5.0`. Rules without thresholds always fire.
+
+#### Credential Interpolation
+
+`_interpolate_env()` replaces `${VAR_NAME}` patterns in any string-valued config field at load time. Credentials (webhook URLs, SMTP passwords) are never stored in plain text in `pace.config.yaml` — they reference environment variables that CI/CD injects at runtime.
+
+#### Item 5: Architectural Decisions
+
+**AD-5-1: `EmailAdapter` uses stdlib `smtplib` only**
+Rationale: Adding a third-party mailer library (`sendgrid`, `boto3/ses`) would require pip changes in every PACE installation. `smtplib` + STARTTLS covers the vast majority of SMTP relays (Gmail App Password, SendGrid SMTP bridge, AWS SES SMTP) with zero new dependencies.
+
+**AD-5-2: Best-effort alerting — channel errors never re-raised**
+Rationale: A failed Slack webhook must not abort a PACE pipeline. `AlertEngine` logs errors and continues. If all channels fail, the pipeline still runs to completion.
+
+**AD-5-3: `AlertEngine` instantiated once in `main()`, passed as list ref to closures**
+Rationale: `_update_daily_spend()` is registered as an `atexit` callback and cannot take arguments after registration. A one-element list (`_alert_engine_ref`) acts as a mutable cell that the closure captures by reference — avoiding a global variable while still being accessible from the atexit scope.
+
+#### Item 5: Variations from Plan
+
+| ROADMAP Step | Planned | Actual | Status |
+| ------------ | ------- | ------ | ------ |
+| Step 5 (`config_tester.py`) | Validate channel creds exist | Also validates alert rule events against known event constants; cross-references channels in rules against configured channels | Enhancement |
+| `update_available` event | Wire into `updater.py` | Constant defined, not yet fired from updater | Deferred |
+
+---
+
+### Item 6 — Tracker Artifact Push
+
+**Branch:** `phase3/item-6-tracker-artifacts`
+**PR:** #8
+**Status:** Merged (rebased onto main 2026-03-14 after Item 5 conflict resolution)
+
+#### Item 6: Changes
+
+| File | Change Type | Description |
+| ---- | ----------- | ----------- |
+| `pace/platforms/base.py` | Modified | `push_story()`, `update_story_status()`, `post_handoff_comment()` abstract methods on `TrackerAdapter` |
+| `pace/platforms/github.py` | Modified | Implemented `push_story`, `update_story_status`, `post_handoff_comment` |
+| `pace/platforms/gitlab.py` | Modified | Implemented `push_story`, `update_story_status`, `post_handoff_comment` |
+| `pace/platforms/jira.py` | Modified | Implemented `push_story`, `update_story_status` (transition API), `post_handoff_comment`; `_find_transition_id()` helper |
+| `pace/platforms/bitbucket.py` | Modified | Implemented `push_story`, `update_story_status`, `post_handoff_comment` |
+| `pace/platforms/local.py` | Modified | No-op stubs for new abstract methods |
+| `pace/issue_template.py` | New | `render_story_issue_body()` — Markdown template for story issues |
+| `pace/orchestrator.py` | Modified | `push_story` after PRIME generates story; `update_story_status` + `post_handoff_comment` at SHIP (after alert fire) |
+| `pace/config_tester.py` | Modified | `_validate_tracker()` — warns when tracker configured but credentials missing |
+
+#### New TrackerAdapter Methods
+
+| Method | Signature | Purpose |
+| ------ | --------- | ------- |
+| `push_story` | `(day, day_dir) -> str` | Creates/updates a tracker issue from the PRIME story output; returns URL |
+| `update_story_status` | `(day, day_dir, status) -> None` | Transitions the tracker issue to a new status (`done`, `in-progress`, etc.) |
+| `post_handoff_comment` | `(day, day_dir) -> None` | Posts a comment linking the shipped artifacts (PR URL, gate report, sentinel report) |
+
+#### Jira Transition Lookup
+
+Jira uses numeric transition IDs, not status names. `_find_transition_id(key, target_name)` calls `GET /issue/{key}/transitions` and returns the first transition whose name contains `target_name` (case-insensitive). This handles varied Jira workflow names (`Done`, `Mark as Done`, `Close`) without hardcoding IDs.
+
+#### SHIP Ordering
+
+At SHIP, the orchestrator fires in this order:
+
+1. `AlertEngine.fire("story_shipped", ...)` — alert channels notified first
+2. `tracker.update_story_status(day, day_dir, "done")` — issue closed
+3. `tracker.post_handoff_comment(day, day_dir)` — handoff comment posted
+
+Both tracker calls are wrapped in a single `try/except` — a tracker failure is logged and never blocks the pipeline exit.
+
+#### Item 6: Architectural Decisions
+
+**AD-6-1: Separate `push_story` from `open_escalation_issue`**
+Rationale: Story issues and escalation issues have different lifecycles. Stories are created at sprint start and closed at SHIP. Escalation issues are created on HOLD and may outlive the sprint. Keeping them as separate abstract methods avoids an overloaded method with a `type` flag.
+
+**AD-6-2: `issue_template.py` for story body rendering**
+Rationale: The Markdown body is used by all five platform adapters. A shared template module avoids duplication and ensures all trackers render the same structured body (AC list, tech context, links).
+
+**AD-6-3: `_find_transition_id` logs errors instead of silent pass**
+Rationale: A bare `except: pass` made Jira API failures invisible. Logging the exception with key and target name lets operators diagnose misconfigured Jira workflows without enabling debug mode.
+
+#### Item 6: Variations from Plan
+
+| ROADMAP Step | Planned | Actual | Status |
+| ------------ | ------- | ------ | ------ |
+| `TrackerConfig` dataclass | Add to `config.py` | `tracker_type` already existed as a string field; no new dataclass needed | Simplified |
+| Tests / fixtures | Add integration test fixtures | Not implemented in this PR | Deferred to Phase 4 |
+
+---
+
+### Item 7 — GitLab, Jenkins, and Bitbucket Pipeline Finalization
+
+**Branch:** `phase3/item-7-platform-finalization`
+**PR:** #9
+**Status:** Open (pending merge — rebased onto main 2026-03-14 after Item 5 conflict)
+
+#### Item 7: Changes
+
+| File | Change Type | Description |
+| ---- | ----------- | ----------- |
+| `pace/platforms/base.py` | Modified | `get_variable(name) -> str \| None` concrete method on `CIAdapter` (reads `os.environ`) |
+| `pace/platforms/jenkins.py` | Modified | `set_variable()` persists to `jenkins-variables.json`; `get_variable()` reads env first, then JSON store |
+| `pace/platforms/gitlab.py` | Modified | `GitLabBranchingAdapter` — full branches/MR API |
+| `pace/platforms/bitbucket.py` | Modified | `BitbucketBranchingAdapter` — full refs/PRs API |
+| `pace/branching.py` | Modified | Factory wired for `gitlab` and `bitbucket` ci_type |
+| `pace/ci_generator.py` | Modified | Removed `not yet implemented` stubs; added real `_update_gitlab_cron()`, `_update_jenkins_cron()`, `_update_bitbucket_cron()`; generic `_update_cron_in_file()` helper |
+| `.gitlab-ci.yml` | New | Full PACE pipeline template (plan/forge/gate/sentinel/conduit stages) |
+| `Jenkinsfile` | New | Declarative pipeline with equivalent stages + cron trigger |
+| `bitbucket-pipelines.yml` | New | Pipelines YAML with equivalent step structure |
+
+#### `get_variable` on `CIAdapter`
+
+The base implementation reads from `os.environ`, which covers GitHub Actions (`vars.*`), GitLab CI/CD variables, and Bitbucket repository variables — all inject variables as env vars before the job runs. Jenkins overrides to also read `jenkins-variables.json` (the file-based store written by `set_variable()`), because Jenkins has no built-in runtime variable mutation API.
+
+#### GitLab and Bitbucket BranchingAdapters
+
+Both follow the `GitHubBranchingAdapter` pattern:
+
+| Method | GitLab API | Bitbucket API |
+| ------ | ---------- | ------------- |
+| `get_branch_sha` | `GET /projects/:id/repository/branches/:branch` | `GET /repositories/:ws/:repo/refs/branches/:branch` |
+| `create_branch` | `POST /projects/:id/repository/branches` | `POST /repositories/:ws/:repo/refs/branches` |
+| `create_pull_request` | `POST /projects/:id/merge_requests` | `POST /repositories/:ws/:repo/pullrequests` |
+
+409/400-already-exists responses are treated as no-ops (idempotent create).
+
+#### CI Template Design
+
+GitLab and Bitbucket schedule their pipelines through the platform UI (not in the YAML file), so `ci_generator.py` emits an advisory message for those platforms rather than patching a file. Jenkins schedules via the `cron()` trigger in the Jenkinsfile, which `ci_generator.py` patches in-place using a regex.
+
+#### Item 7: Architectural Decisions
+
+**AD-7-1: `get_variable` as a concrete base method, not abstract**
+Rationale: All five CI platforms inject variables as environment variables. Making the base method concrete with `os.environ.get(name)` means only Jenkins needs to override. Platforms that don't need file-based persistence get correct behavior for free.
+
+**AD-7-2: GitLab/Bitbucket schedule management stays in UI**
+Rationale: GitLab CI schedules (`CI/CD → Schedules`) and Bitbucket pipeline schedules (`Repository Settings → Pipelines → Schedules`) are not expressible in the pipeline YAML file — they exist as first-class objects in the platform UI. `ci_generator.py` informs users of the required cron expression rather than pretending it can set the schedule programmatically.
+
+**AD-7-3: Jenkins variables persisted to `jenkins-variables.json`**
+Rationale: Jenkins has no REST API for runtime variable mutation that works across all installation types (freestyle, declarative, scripted). File-based persistence in the repo root is the most portable approach — it works in any Jenkins agent where the workspace is writable.
+
+#### Item 7: Variations from Plan
+
+| ROADMAP Step | Planned | Actual | Status |
+| ------------ | ------- | ------ | ------ |
+| Integration test fixtures | Add mock API response fixtures | Not implemented | Deferred to Phase 4 |
+| `gitlab-ci-lint` validation | CI acceptance test | Not automated | Manual acceptance only |
+
+---
+
+## Cross-Cutting Decisions (Phase 3)
+
+### CC-8: Phase 3 branches all target `main`
+
+Same rationale as Phases 1 and 2 (CC-1, CC-4). All Phase 3 feature branches PR to `main`.
+
+### CC-9: Conflict resolution order — Item 5 (main) takes precedence over Item 6 orchestrator changes
+
+Item 5 modified `orchestrator.py` to add `AlertEngine.fire("story_shipped", ...)` at SHIP. Item 6 independently modified the same SHIP block to add tracker artifact push calls. When Item 6 rebased onto main (which had Item 5 merged), the correct resolution was to keep both — alert fires first, then tracker updates. Order is intentional: if the tracker call crashes, the alert has already fired and the pipeline still exits cleanly.
+
+### CC-10: Notification/alert config fields use `__post_init__`-compatible defaults
+
+`notifications` and `alerts` are `None`-defaulted optional fields on `PaceConfig`, parsed from YAML sections that may be absent. An absent `notifications:` section returns `None` from `_parse_notifications()` — `AlertEngine` short-circuits when `cfg.notifications is None`. No existing `pace.config.yaml` requires changes.
+
+### CC-11: Item 7 branching adapters reuse `_GitLabBase` / `_BitbucketBase` credential pattern
+
+Both `GitLabBranchingAdapter` and `BitbucketBranchingAdapter` inherit from the existing `_GitLabBase` / `_BitbucketBase` mixin classes, which centralise credential validation and HTTP headers. This avoids duplicating the `_available` guard and `_headers()` logic.
+
+---
+
 ## Cross-Cutting Decisions (Phase 2)
 
 ### CC-4: Phase 2 branches also target `main`
@@ -507,12 +727,14 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 | Item 3 (Context Versioning) | #4 | ✅ 2026-03-14 |
 | Item 4 (Auto-Update) | #5 | ✅ 2026-03-14 |
 | Item 8 (Cron Config) | #6 | ✅ 2026-03-14 |
+| Item 5 (Communications & Alerting) | #7 | ✅ 2026-03-14 |
+| Item 6 (Tracker Artifact Push) | #8 | ✅ 2026-03-14 |
 
 ## Pending Work
 
 | Item | Status | Next Action |
 | ---- | ------ | ----------- |
-| Items 5, 6, 7 (Phase 3) | Not started | See ROADMAP Phase 3 (`@Since v2.0-rc`) |
+| Item 7 (Platform Finalization) | PR #9 open | Merge `phase3/item-7-platform-finalization` → main |
 | Item 10 (Phase 4) | Not started | See ROADMAP Phase 4 (`@Since v2.1`) |
 | Item 1 deferred steps (5–6) | Not started | Staging CI gate + branch-protection checks |
 | Item 2 deferred steps (3, 5) | Not started | PRIME plan_mode, SCRIBE planning report |
@@ -520,8 +742,10 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 | Item 4 deferred step (7) | Not started | CONDUIT update summary in daily report |
 | Item 4 tutorial URL | Placeholder | Real `pace-docs` tutorial page needed |
 | Item 8 deferred step (5) | Not started | `config_tester.py` ↔ `ci_generator.py` cross-wire |
+| Item 5 `update_available` event | Not started | Wire into `updater.py` |
+| Integration tests (Items 6, 7) | Not started | Platform adapter fixtures — deferred to Phase 4 |
 
 ---
 
-*ROADMAP Execution Log v1.3 — 2026-03-14 IST (All Phase 1 + Phase 2 PRs confirmed merged; Phase 3 is next)*
-*Author: Vivek Meehnia*
+*ROADMAP Execution Log v1.4 — 2026-03-14 IST (Phase 3 implemented: Item 5 merged; Items 6 + 7 PRs open)*
+*Author: Vipul Meehnia*
