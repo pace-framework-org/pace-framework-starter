@@ -415,10 +415,10 @@ def _validate_plugins(raw: dict, r: ConfigTestResult) -> None:
                     instance = klass()
                     m = instance.manifest()
                     installed_names[m.name] = m.version
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    r.warn(f"Failed to inspect plugin entry point '{ep.name}' in group '{group}': {e}")
+        except Exception as e:
+            r.warn(f"Failed to scan plugin entry point group '{group}': {e}")
 
     from config import PACE_VERSION
 
@@ -471,10 +471,13 @@ def _validate_plugins(raw: dict, r: ConfigTestResult) -> None:
                             + f" but PACE_VERSION is {PACE_VERSION}; "
                             "plugin will be skipped at runtime"
                         )
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    r.warn(
+                        f"Failed to inspect plugin entry point '{ep.name}' in group "
+                        f"'{ep_group}' for PACE version compatibility: {e}"
+                    )
+        except Exception as e:
+            r.warn(f"Failed to scan plugin entry point group '{ep_group}' for compatibility: {e}")
 
 
 def _validate_cron(raw: dict, r: ConfigTestResult) -> None:
