@@ -217,7 +217,7 @@ def commit_artifact(path: Path, message: str) -> None:
     )
 
 
-def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, tracker: TrackerAdapter) -> tuple[bool, str]:
+def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, tracker: TrackerAdapter, registry: PluginRegistry | None = None) -> tuple[bool, str]:
     day_dir = PACE_DIR / f"day-{day}"
     day_dir.mkdir(parents=True, exist_ok=True)
 
@@ -247,6 +247,8 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
         story_file.write_text(yaml.dump(story_card, default_flow_style=False, allow_unicode=True))
         commit_artifact(story_file, f"Day {day}: PRIME story card")
         print(f"[PACE] Story card written.")
+        if registry:
+            registry.fire_hook("story_generated", {"day": day, "story": story_card})
 
     # Step 1b: SCOPE — always applied, even on retry, so config changes (e.g. a lowered
     # max_story_ac after a HOLD) are respected without re-running PRIME.
@@ -346,6 +348,8 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
         handoff_file = day_dir / "handoff.md"
         handoff_file.write_text(yaml.dump(handoff, default_flow_style=False, allow_unicode=True))
         commit_artifact(handoff_file, f"Day {day}: FORGE handoff note (attempt {attempt})")
+        if registry:
+            registry.fire_hook("forge_complete", {"day": day, "attempt": attempt, "handoff": handoff})
 
         # Step 2b: Wait for CI
         commit_sha = handoff.get("commit", "")
@@ -379,6 +383,8 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
             continue
 
         commit_artifact(gate_file, f"Day {day}: GATE report — PASS attempt {attempt}")
+        if registry:
+            registry.fire_hook("gate_pass", {"day": day, "attempt": attempt, "gate_report": gate_report})
 
         # Step 4: SENTINEL
         print(f"[PACE] Day {day}: Invoking SENTINEL...")
@@ -428,6 +434,8 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
             print(f"[PACE] Day {day}: SENTINEL cleared advisory backlog.")
 
         commit_artifact(sentinel_file, f"Day {day}: SENTINEL report — {sentinel_decision} attempt {attempt}")
+        if registry:
+            registry.fire_hook("sentinel_pass", {"day": day, "attempt": attempt, "sentinel_report": sentinel_report})
 
         # Step 5: CONDUIT
         print(f"[PACE] Day {day}: Invoking CONDUIT...")
@@ -477,6 +485,8 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
             print(f"[PACE] Day {day}: CONDUIT cleared advisory backlog.")
 
         commit_artifact(conduit_file, f"Day {day}: CONDUIT report — {conduit_decision} attempt {attempt}")
+        if registry:
+            registry.fire_hook("conduit_pass", {"day": day, "attempt": attempt, "conduit_report": conduit_report})
 
         # Clearance day: verify all open items were resolved
         if is_clearance_day and open_backlog:
@@ -593,6 +603,18 @@ def main() -> None:
     # v2.1 Plugin System: discover and load all installed plugins (Item 10).
     _plugin_registry = load_plugins(cfg_main)
     _plugin_registry_ref[0] = _plugin_registry
+
+    # v2.2 Training Data Pipeline: register DataExportHook when enabled (Item 11).
+    if cfg_main.training.export_on_ship:
+        from training.hook import DataExportHook
+        _data_hook = DataExportHook()
+        _data_hook.configure({
+            "output_dir": cfg_main.training.output_dir,
+            "format": cfg_main.training.format,
+            "min_gate_pass_rate": cfg_main.training.min_gate_pass_rate,
+        })
+        _plugin_registry._register(_data_hook)
+
     _plugin_registry.fire_hook("pipeline_start", {"day": day})
 
     if cfg_main.release:
@@ -630,7 +652,7 @@ def main() -> None:
     recent_gates = get_recent_gate_reports(day)
     _plugin_registry.fire_hook("day_start", {"day": day, "target": day_plan.get("target", "")})
     try:
-        shipped, _last_hold_reason = run_cycle(day, day_plan, recent_gates, ci, tracker)
+        shipped, _last_hold_reason = run_cycle(day, day_plan, recent_gates, ci, tracker, registry=_plugin_registry)
     except CycleAbortError as exc:
         write_job_summary(day, "ABORT", None, None, None, None, abort_reason=str(exc), ci=ci)
         print(f"[PACE] Day {day}: Cycle aborted — {exc}")
@@ -660,7 +682,7 @@ def main() -> None:
     commit_artifact(PROGRESS_FILE, f"Day {day}: PROGRESS.md update — SHIP")
     print(f"[PACE] === Day {day} complete — SHIPPED ===")
     _alert_engine_ref[0].fire("story_shipped", {"day": day})
-    _plugin_registry.fire_hook("day_shipped", {"day": day})
+    _plugin_registry.fire_hook("day_shipped", {"day": day, "pace_dir": PACE_DIR})
     # Tracker artifact push — best-effort, never blocks the pipeline
     try:
         tracker.update_story_status(day, day_dir, "done")

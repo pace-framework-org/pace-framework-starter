@@ -449,7 +449,46 @@ v2.0-rc     ──►  Item 5  (Communications & Alerts)
                  Item 7  (GitLab/Jenkins/Bitbucket)
 
 v2.1        ──►  Item 10 (Plugin System)
+
+v2.2        ──►  Item 11 (Training Data Pipeline)
 ```
+
+---
+
+## Phase 5 — Training Data Pipeline (`@Since v2.2`)
+
+**Goal:** Instrument PACE to continuously collect and export high-quality LLM fine-tuning data from every shipped story, enabling future SFT and RLHF on PACE-generated code generation traces.
+
+### Item 11 — Training Data Pipeline
+
+**Background:** Each PACE sprint day produces a structured triple that is exactly what is needed for LLM fine-tuning:
+
+- `story.md` — natural language requirements (input to FORGE)
+- `forge_trace.json` — FORGE's full conversation trace: system prompt, tool calls, tool results, and assistant turns (the target sequence to learn)
+- `handoff.md` — structured outcome: coverage delta, test counts, iterations used, cost (output signal)
+- `gate.md` — per-AC pass/fail results (reward labels for RLHF)
+
+Filtered to shipped days only (GATE decision == SHIP), this corpus trains a smaller, faster model to replicate FORGE's code generation behaviour at 80–95% lower cost.
+
+**Architecture:**
+
+1. **`pace/training/collector.py`** — reads `.pace/day-N/` artifacts and constructs `StoryTrace` dataclass instances; computes an RLHF reward score from GATE pass rate, `iterations_used`, and `forge_cost_usd`.
+2. **`pace/training/exporter.py`** — serialises traces to JSONL in two formats:
+   - **SFT**: Anthropic messages format `(system + story, FORGE trace)` pairs for supervised fine-tuning.
+   - **Reward**: `(trace, score)` pairs for RLHF reward model training.
+3. **`pace/training/hook.py`** — `DataExportHook(HookBase)`, subscribed to `day_shipped`; invokes collector + exporter; configured via `pace.config.yaml` `training:` section.
+4. **`pace/agents/forge.py`** — on successful `complete_handoff`, write the conversation trace to `forge_trace.json` before clearing the checkpoint, so the artifact persists for the hook.
+5. **`pace/config.py`** — `TrainingConfig` dataclass; `training:` key on `PaceConfig`.
+6. **`pace/orchestrator.py`** — register `DataExportHook` when `cfg.training.export_on_ship`; fire remaining lifecycle hooks (`story_generated`, `forge_complete`, `gate_pass`, `sentinel_pass`, `conduit_pass`); include `pace_dir` in `day_shipped` payload.
+7. **`pace/config_tester.py`** — `_validate_training()` validator.
+
+**Acceptance criteria:**
+1. After a shipped day, `.pace/day-N/forge_trace.json` exists and contains a `messages` list of Anthropic-format turns.
+2. `DataExportHook` appends one JSONL line per shipped story to the configured `output_dir`.
+3. `export_sft_jsonl()` produces valid Anthropic fine-tuning format (system, messages array).
+4. `export_reward_jsonl()` produces `{prompt, completion, reward}` lines with reward ∈ [0.0, 1.0].
+5. `_validate_training()` catches invalid `output_dir`, unsupported `format`, and out-of-range `min_gate_pass_rate`.
+6. All remaining `HOOK_EVENTS` (`story_generated`, `forge_complete`, `gate_pass`, `sentinel_pass`, `conduit_pass`) are fired by the orchestrator at the correct pipeline points.
 
 ---
 
@@ -487,5 +526,5 @@ This is deferred to post-v2.1 because it requires a minimum viable dataset that 
 
 ---
 
-*PACE Framework Roadmap v1.2 — 2026-03-14 IST*
+*PACE Framework Roadmap v1.3 — 2026-03-15 IST*
 *Author: Vipuul Meehniaa*

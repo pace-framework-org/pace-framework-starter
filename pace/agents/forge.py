@@ -321,11 +321,52 @@ def _load_checkpoint(day: int) -> dict | None:
         return None
 
 
+def _trace_path(day: int) -> Path:
+    return PACE_DIR / f"day-{day}" / "forge_trace.json"
+
+
 def _clear_checkpoint(day: int) -> None:
     try:
         _checkpoint_path(day).unlink(missing_ok=True)
     except Exception:
         pass
+
+
+def _save_trace(day: int, messages: list, system_prompt: str, red_phase_confirmed: bool, iterations_used: int) -> None:
+    """Persist the FORGE conversation trace as a permanent training artifact.
+
+    Written immediately before the checkpoint is cleared on a successful
+    complete_handoff so that the DataExportHook (and any external tooling)
+    can read the full Anthropic-format message history after the sprint day
+    is marked SHIP.  The checkpoint itself is still cleared so that the next
+    retry starts from scratch.
+
+    Schema written to forge_trace.json:
+        {
+            "system": "<FORGE system prompt>",
+            "messages": [<Anthropic-format turns>],
+            "red_phase_confirmed": true | false,
+            "iterations_used": N,
+        }
+    """
+    path = _trace_path(day)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.write_text(
+            json.dumps(
+                {
+                    "system": system_prompt,
+                    "messages": messages,
+                    "red_phase_confirmed": red_phase_confirmed,
+                    "iterations_used": iterations_used,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        print(f"[FORGE] Warning: trace save failed: {e}")
 
 
 def run_forge(day: int, story_card: dict, hold_reason: str | None = None) -> dict:
@@ -467,7 +508,15 @@ You have access to tools: {tools_list}."""
             })
 
         if handoff_data:
-            # Successful handoff — remove checkpoint so next retry starts fresh.
+            # Successful handoff — persist trace for training data pipeline,
+            # then remove checkpoint so next retry starts fresh.
+            _save_trace(
+                day,
+                messages,
+                system_prompt,
+                red_phase_confirmed,
+                handoff_data.get("iterations_used", iteration + 1),
+            )
             _clear_checkpoint(day)
             break
 

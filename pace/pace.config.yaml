@@ -301,6 +301,31 @@ cost_control:
 #   story_generated  forge_complete gate_pass    sentinel_pass  conduit_pass
 
 # ---------------------------------------------------------------------------
+# Training Data Pipeline — LLM fine-tuning corpus export (v2.2)
+# ---------------------------------------------------------------------------
+# When export_on_ship is true (default), PACE appends one record per shipped
+# sprint day to a JSONL corpus file in output_dir/.  These traces are ready
+# for supervised fine-tuning (SFT) or RLHF reward-model training on any
+# framework that accepts Anthropic messages format (e.g. together.ai, modal,
+# or Anthropic's own fine-tuning API when available).
+#
+# Output files:
+#   <output_dir>/sft_corpus.jsonl     — (system, messages) pairs for SFT
+#   <output_dir>/reward_corpus.jsonl  — (prompt, completion, reward) for RLHF
+#
+# Reward score formula:
+#   base  = gate_pass_rate            (fraction of AC that passed)
+#   bonus = +0.10 if iterations <= 10 (efficient implementation)
+#   cost  = -min(0.20, cost_usd*0.10) (proportional cost penalty)
+#   score = clamp(base + bonus - cost, 0.0, 1.0)
+#
+training:
+  export_on_ship: true           # Append trace on every SHIP event
+  output_dir: "training_data"   # Relative to CWD when orchestrator runs
+  format: "both"                # "sft" | "reward" | "both"
+  min_gate_pass_rate: 0.0       # 0.0 = collect all; raise to filter low-quality traces
+
+# ---------------------------------------------------------------------------
 # FORGE agent behaviour
 # ---------------------------------------------------------------------------
 forge:

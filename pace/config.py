@@ -127,6 +127,19 @@ class PluginEntryConfig:
 
 
 @dataclass
+class TrainingConfig:
+    """Configuration for the training data pipeline (@Since v2.2).
+
+    Controls how DataExportHook collects and exports story traces from
+    shipped sprint days to build an LLM fine-tuning corpus.
+    """
+    export_on_ship: bool = True             # Register DataExportHook in the orchestrator
+    output_dir: str = "training_data"      # Directory where JSONL corpus files are written
+    format: str = "both"                   # "sft" | "reward" | "both"
+    min_gate_pass_rate: float = 0.0        # Minimum GATE pass rate to include a trace [0.0–1.0]
+
+
+@dataclass
 class SlackConfig:
     """Slack Incoming Webhook credentials."""
     webhook_url: str  # supports ${VAR_NAME} env interpolation
@@ -188,12 +201,15 @@ class PaceConfig:
     notifications: NotificationsConfig | None = None  # notification channel credentials
     alerts: list[AlertRuleConfig] | None = None        # alert rules (event → channels)
     plugins: list[PluginEntryConfig] | None = None     # installed plugin configurations (v2.1)
+    training: TrainingConfig = None  # type: ignore[assignment]  # training data pipeline (v2.2)
 
     def __post_init__(self) -> None:
         if self.updates is None:
             self.updates = UpdatesConfig()
         if self.cron is None:
             self.cron = CronConfig()
+        if self.training is None:
+            self.training = TrainingConfig()
 
     def source_dirs_table(self) -> str:
         """Return a formatted table of source directories for use in agent system prompts."""
@@ -279,6 +295,18 @@ def _parse_alerts(raw: list) -> list[AlertRuleConfig] | None:
             threshold_minutes=float(threshold_minutes) if threshold_minutes is not None else None,
         ))
     return rules or None
+
+
+def _parse_training(raw: dict) -> TrainingConfig:
+    """Build a TrainingConfig from the ``training:`` YAML section."""
+    if not raw:
+        return TrainingConfig()
+    return TrainingConfig(
+        export_on_ship=bool(raw.get("export_on_ship", True)),
+        output_dir=str(raw.get("output_dir", "training_data")),
+        format=str(raw.get("format", "both")),
+        min_gate_pass_rate=float(raw.get("min_gate_pass_rate", 0.0)),
+    )
 
 
 @lru_cache(maxsize=1)
@@ -381,6 +409,7 @@ def load_config() -> PaceConfig:
     notifications = _parse_notifications(raw.get("notifications") or {})
     alerts = _parse_alerts(raw.get("alerts") or [])
     plugins = _parse_plugins(raw.get("plugins") or [])
+    training = _parse_training(raw.get("training") or {})
 
     return PaceConfig(
         product_name=product.get("name", "My Product"),
@@ -403,4 +432,5 @@ def load_config() -> PaceConfig:
         notifications=notifications,
         alerts=alerts,
         plugins=plugins,
+        training=training,
     )
