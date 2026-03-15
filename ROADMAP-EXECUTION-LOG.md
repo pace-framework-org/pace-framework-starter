@@ -2,8 +2,8 @@
 
 **Author:** Vipul Meehnia
 **Started:** 2026-03-13 (IST — Asia/Kolkata)
-**Log Version:** 1.6
-**Aligned With:** ROADMAP v1.2
+**Log Version:** 1.7
+**Aligned With:** ROADMAP v1.3
 
 ---
 
@@ -18,6 +18,7 @@
 | 1.4 | 2026-03-14 | Phase 3 implemented: Item 5 (Communications & Alerting) merged; Items 6 (Tracker Artifacts) and 7 (Platform Finalization) PRs open |
 | 1.5 | 2026-03-15 | Phase 3 complete: Item 7 (PR #10) merged; Phase 4 (Item 10 Plugin System) started |
 | 1.6 | 2026-03-15 | Phase 4 complete: Item 10 (PR #11) merged; all 4 ROADMAP phases delivered |
+| 1.7 | 2026-03-15 | Phase 5 implemented: Item 11 (Training Data Pipeline) PR open; ROADMAP extended to v1.3 |
 
 ---
 
@@ -719,6 +720,48 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 
 ---
 
+## Phase 5 — Training Data Pipeline (@Since v2.2)
+
+### Item 11 — Training Data Pipeline (PR #12 — branch `phase5/item-11-training-data-pipeline`)
+
+**Goal:** Instrument every shipped sprint day to produce a JSONL training corpus ready for LLM supervised fine-tuning (SFT) and RLHF reward modelling.
+
+**Files created / modified:**
+
+| File | Change |
+| ---- | ------ |
+| `pace/training/__init__.py` | New — public API for the training module |
+| `pace/training/collector.py` | New — `StoryTrace` dataclass + `collect_story_trace()` + `collect_all_traces()` + reward scoring |
+| `pace/training/exporter.py` | New — `export_sft_jsonl()` (Anthropic messages format) + `export_reward_jsonl()` (prompt/completion/reward) |
+| `pace/training/hook.py` | New — `DataExportHook(HookBase)` subscribed to `day_shipped`; configured from `TrainingConfig` |
+| `pace/agents/forge.py` | Added `_trace_path()` + `_save_trace()` helpers; call `_save_trace()` before `_clear_checkpoint()` on successful handoff |
+| `pace/config.py` | Added `TrainingConfig` dataclass + `training` field on `PaceConfig` + `_parse_training()` + wired into `load_config()` |
+| `pace/pace.config.yaml` | Added documented `training:` section with all four knobs uncommented and ready to use |
+| `pace/orchestrator.py` | Register `DataExportHook` when `cfg.training.export_on_ship`; fire all 5 remaining `HOOK_EVENTS` (`story_generated`, `forge_complete`, `gate_pass`, `sentinel_pass`, `conduit_pass`); pass `registry` to `run_cycle()`; add `pace_dir` to `day_shipped` payload |
+| `pace/config_tester.py` | Added `_validate_training()` + wired into `run_config_test()` |
+| `ROADMAP.md` | Added Phase 5 section (Item 11); sequencing summary updated to v2.2; footer version v1.3 |
+| `ROADMAP-EXECUTION-LOG.md` | This entry; log version 1.7 |
+
+**Key design decisions:**
+
+- **Trace preservation strategy**: `forge_checkpoint.json` is cleared on successful handoff (needed for retry idempotency). Rather than change the clear semantics, `_save_trace()` writes `forge_trace.json` immediately before `_clear_checkpoint()` — the trace persists as a permanent day artifact; the checkpoint is still ephemeral.
+- **`DataExportHook` as a built-in, not entry-point plugin**: The hook ships with PACE itself and is registered directly by the orchestrator (not via `importlib.metadata`). It still uses the full `HookBase`/`PluginRegistry` infrastructure, so it benefits from `fire_hook()`'s error isolation.
+- **Reward score formula**: `score = clamp(gate_pass_rate + 0.10*(iterations≤10) - min(0.20, cost_usd*0.10), 0.0, 1.0)`. This anchors quality to GATE pass rate, rewards efficiency, and penalises expensive runs — all without requiring human labellers.
+- **All remaining `HOOK_EVENTS` now fired**: `story_generated`, `forge_complete`, `gate_pass`, `sentinel_pass`, `conduit_pass` were declared in `base.py` (Phase 4) but not yet fired. Phase 5 fires them all, closing the gap between the declared event vocabulary and the actual orchestrator lifecycle.
+
+**Acceptance criteria status:**
+
+| AC | Status |
+| -- | ------ |
+| `forge_trace.json` written on successful handoff | ✅ |
+| `DataExportHook` appends JSONL per shipped day | ✅ |
+| `export_sft_jsonl()` Anthropic format | ✅ |
+| `export_reward_jsonl()` prompt/completion/reward | ✅ |
+| `_validate_training()` covers all knobs | ✅ |
+| All 5 remaining `HOOK_EVENTS` fired | ✅ |
+
+---
+
 ## Merged to Main
 
 | Item | PR | Merged |
@@ -733,6 +776,7 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 | Item 6 (Tracker Artifact Push) | #8 | ✅ 2026-03-14 |
 | Item 7 (Platform Finalization) | #10 | ✅ 2026-03-15 |
 | Item 10 (Plugin System) | #11 | ✅ 2026-03-15 |
+| Item 11 (Training Data Pipeline) | #12 | 🔄 PR open |
 
 ## Pending Work
 
@@ -745,9 +789,9 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 | Item 4 tutorial URL | Placeholder | Real `pace-docs` tutorial page needed |
 | Item 8 deferred step (5) | Not started | `config_tester.py` ↔ `ci_generator.py` cross-wire |
 | Item 5 `update_available` event | Not started | Wire into `updater.py` |
-| Integration tests (Items 6, 7) | Not started | Platform adapter fixtures — deferred to Phase 4 |
+| Integration tests (Items 6, 7) | Not started | Platform adapter fixtures |
 
 ---
 
-*ROADMAP Execution Log v1.6 — 2026-03-15 IST (All 4 ROADMAP phases complete: v2.0-alpha through v2.1 delivered)*
+*ROADMAP Execution Log v1.7 — 2026-03-15 IST (Phase 5 implemented: v2.2 Training Data Pipeline)*
 *Author: Vipul Meehnia*

@@ -512,6 +512,55 @@ def _validate_reporter(raw: dict, r: ConfigTestResult) -> None:
         )
 
 
+def _validate_training(raw: dict, r: ConfigTestResult) -> None:
+    """Validate the training: section (v2.2 Training Data Pipeline)."""
+    training = raw.get("training")
+    if training is None:
+        # Not configured — that is fine; defaults will be used.
+        return
+
+    if not isinstance(training, dict):
+        r.error("training must be a YAML mapping (key: value pairs)")
+        return
+
+    # format
+    fmt = training.get("format", "both")
+    if fmt not in ("sft", "reward", "both"):
+        r.error(
+            f"training.format '{fmt}' is not valid; "
+            "supported values: 'sft', 'reward', 'both'"
+        )
+
+    # min_gate_pass_rate
+    rate = training.get("min_gate_pass_rate")
+    if rate is not None:
+        try:
+            rate_f = float(rate)
+            if not 0.0 <= rate_f <= 1.0:
+                r.error(
+                    f"training.min_gate_pass_rate {rate_f} is out of range; "
+                    "must be between 0.0 and 1.0 (inclusive)"
+                )
+        except (TypeError, ValueError):
+            r.error(f"training.min_gate_pass_rate '{rate}' must be a number")
+
+    # output_dir — warn if it looks absolute and unusual
+    output_dir = training.get("output_dir", "training_data")
+    if output_dir and str(output_dir).startswith("/"):
+        r.suggest(
+            f"training.output_dir '{output_dir}' is an absolute path; "
+            "consider a relative path so the corpus stays portable with the repo"
+        )
+
+    # export_on_ship
+    export = training.get("export_on_ship", True)
+    if not isinstance(export, bool):
+        r.warn(
+            f"training.export_on_ship should be true or false (boolean); "
+            f"got '{export}' — will be coerced"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
@@ -548,6 +597,7 @@ def run_config_test(config_file: Path = CONFIG_FILE) -> ConfigTestResult:
     _validate_plugins(raw, r)
     _validate_cron(raw, r)
     _validate_reporter(raw, r)
+    _validate_training(raw, r)
 
     return r
 
