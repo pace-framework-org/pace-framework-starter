@@ -163,16 +163,26 @@ def _validate_source(raw: dict, r: ConfigTestResult) -> None:
             "specifying where to write code"
         )
         return
+    repo_root = Path(__file__).parent.parent
     for i, d in enumerate(dirs):
         if not d.get("name"):
             r.error(f"source.dirs[{i}].name is required")
         if not d.get("path"):
             r.error(f"source.dirs[{i}].path is required")
-        elif not str(d["path"]).endswith("/"):
-            r.warn(
-                f"source.dirs[{i}].path '{d['path']}' does not end with '/' — "
-                "convention is to include a trailing slash"
-            )
+        else:
+            path_str = str(d["path"])
+            if not path_str.endswith("/"):
+                r.warn(
+                    f"source.dirs[{i}].path '{path_str}' does not end with '/' — "
+                    "convention is to include a trailing slash"
+                )
+            # Check the directory exists on disk so FORGE doesn't write into a void
+            resolved = (repo_root / path_str.rstrip("/")).resolve()
+            if not resolved.exists():
+                r.warn(
+                    f"source.dirs[{i}].path '{path_str}' does not exist at '{resolved}'; "
+                    "create the directory before running FORGE or FORGE writes will fail"
+                )
     docs_dir = source.get("docs_dir")
     if docs_dir:
         p = (
