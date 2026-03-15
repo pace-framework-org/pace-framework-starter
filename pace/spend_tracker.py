@@ -36,6 +36,16 @@ _FALLBACK_COSTS: dict[str, float] = {"input": 3.00, "output": 15.00}  # sonnet r
 _records: list[dict] = []
 
 
+def install() -> None:
+    """No-op compatibility shim.
+
+    Originally intended to monkeypatch the Anthropic SDK for forge.py's direct
+    API calls, but forge.py routes all calls through the LLM adapter which
+    already calls record() explicitly.  Kept so orchestrator.py need not be
+    version-gated.
+    """
+
+
 def record(model: str, input_tokens: int, output_tokens: int) -> None:
     """Record a single API call's token usage."""
     _records.append({"model": model, "in": input_tokens, "out": output_tokens})
