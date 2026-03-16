@@ -59,9 +59,22 @@ def acquire_pipeline_lock() -> None:
 
     if LOCK_FILE.exists():
         try:
-            age = time.time() - LOCK_FILE.stat().st_mtime
+            # Use the timestamp embedded in the file content (st_mtime is unreliable
+            # after a git checkout, where the file's mtime is set to checkout time).
+            content = LOCK_FILE.read_text().strip()
+            age = _LOCK_MAX_AGE_SECONDS + 1  # default: treat as stale
+            for line in content.splitlines():
+                if line.startswith("started="):
+                    try:
+                        import datetime
+                        started = datetime.datetime.strptime(
+                            line[len("started="):], "%Y-%m-%dT%H:%M:%SZ"
+                        ).replace(tzinfo=datetime.timezone.utc)
+                        age = (datetime.datetime.now(datetime.timezone.utc) - started).total_seconds()
+                    except ValueError:
+                        pass
+                    break
             if age < _LOCK_MAX_AGE_SECONDS:
-                content = LOCK_FILE.read_text().strip()
                 # Fire pipeline_lock_timeout alert (best-effort — must not block the error)
                 try:
                     from config import load_config

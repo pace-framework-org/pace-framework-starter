@@ -8,6 +8,7 @@ venv/
 
 # PACE runtime — committed intentionally by the orchestrator
 # Do NOT add .pace/ here; PACE artifacts live in .pace/ and are tracked.
+.pace/pipeline.lock
 
 # OS
 .DS_Store
