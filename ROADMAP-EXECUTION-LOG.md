@@ -2,7 +2,7 @@
 
 **Author:** Vipul Meehnia
 **Started:** 2026-03-13 (IST — Asia/Kolkata)
-**Log Version:** 1.8
+**Log Version:** 1.9
 **Aligned With:** ROADMAP v1.4
 
 ---
@@ -20,6 +20,7 @@
 | 1.6 | 2026-03-15 | Phase 4 complete: Item 10 (PR #11) merged; all 4 ROADMAP phases delivered |
 | 1.7 | 2026-03-15 | Phase 5 implemented: Item 11 (Training Data Pipeline) PR open; ROADMAP extended to v1.3 |
 | 1.8 | 2026-03-16 | Item 11 (PR #12) confirmed merged; ROADMAP extended to v1.4 with Phase 6 (Items 12–18, Planned); Item 7 status corrected in ROADMAP; unit test suite added (223 tests, 82.76% coverage) |
+| 1.9 | 2026-03-16 | Add missing Phase 4 body section (Item 10 Plugin System); document post-Phase4 stability fixes; remove stale Pending Phase 1 Work section; correct Item 9 PR reference (direct commit, not PR #1) |
 
 ---
 
@@ -254,16 +255,6 @@ Every Phase 1 change is backward-compatible with v1.x configurations:
 ### CC-3: 422 "already exists" handling throughout
 
 The GitHub REST API returns 422 when a branch ref or PR already exists. All three items with GitHub API calls (`GitHubBranchingAdapter.create_branch`, `create_pull_request`, and the workflow's `gh pr create`) treat 422 as a successful no-op. This makes every operation idempotent under retries and race conditions.
-
----
-
-## Pending Phase 1 Work
-
-| Item | Status | Next Action |
-| ---- | ------ | ----------- |
-| Item 9 (Config Tester) | PR #1 open | Review and merge |
-| Item 1 (Branching Model) | PR #2 open | Review and merge |
-| Item 2 (PACE Planner) | PR #3 open | Review and merge |
 
 ---
 
@@ -721,6 +712,105 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 
 ---
 
+## Phase 4 — Plugin System (v2.1)
+
+### Item 10 — Plugin System
+
+**Branch:** `phase4/item-10-plugin-system`
+**PR:** #11
+**Status:** Merged (2026-03-14)
+
+#### Item 10: Changes
+
+| File | Change Type | Description |
+| ---- | ----------- | ----------- |
+| `pace/plugins/base.py` | New | `PluginManifest`, `PluginBase`, `HookBase`, `WebhookInBase`, `WebhookOutBase` ABCs + `HOOK_EVENTS` constants |
+| `pace/plugins/loader.py` | New | `PluginRegistry` + `load_all()` via `importlib.metadata.entry_points()`; `_version_compatible()` guard; webhook-in HTTP server thread |
+| `pace/plugins/__init__.py` | New | Public exports for plugin authors |
+| `pace/config.py` | Modified | `PluginEntryConfig` dataclass; `plugins` field on `PaceConfig`; `_parse_plugins()`; `PACE_VERSION → "2.0.0"` |
+| `pace/pace.config.yaml` | Modified | Documented `plugins:` section with commented examples |
+| `pace/orchestrator.py` | Modified | `load_plugins()` at startup; `fire_hook()` at `pipeline_start`, `day_start`, `day_shipped`, `day_held`, `pipeline_end` (atexit) |
+| `pace/config_tester.py` | Modified | `_validate_plugins()` — checks entries have names, warns on uninstalled plugins, warns on version range incompatibility for installed plugins |
+
+#### Plugin Types
+
+| Type | Interface | Purpose |
+| ---- | --------- | ------- |
+| `agent` | `PluginBase` | New PACE agents callable from the pipeline |
+| `tool` | `PluginBase` | Tools for FORGE/SCRIBE's tool registry |
+| `adapter` | `PluginBase` | LLM/platform/notification adapters |
+| `hook` | `HookBase` | Synchronous lifecycle hooks — `on_event(event, payload)` |
+| `webhook-in` | `WebhookInBase` | HTTP listener for external triggers (port 9876) |
+| `webhook-out` | `WebhookOutBase` | JSON POST to a URL on lifecycle events |
+
+#### Entry Point Discovery
+
+`PluginRegistry.load_all()` uses `importlib.metadata.entry_points(group="pace.plugins")`. Any installed Python package that declares a `pace.plugins` entry point is automatically discovered at startup — no config change required. The `plugins:` config section controls which discovered plugins are enabled and allows version constraints.
+
+#### Lifecycle Events
+
+`fire_hook()` in `orchestrator.py` fires at five points:
+
+| Event | When |
+| ----- | ---- |
+| `pipeline_start` | After preflight, before Day 0/PRIME |
+| `day_start` | Before PRIME generates each story |
+| `day_shipped` | After GATE issues SHIP decision |
+| `day_held` | After GATE issues HOLD decision |
+| `pipeline_end` | atexit — fires on SHIP, HOLD, ABORT, or unhandled exception |
+
+`fire_hook()` wraps each plugin's `on_event()` call in try/except — a plugin crash never blocks the pipeline.
+
+#### Version Compatibility Guard
+
+`_version_compatible(plugin_version, constraint)` parses the constraint string (e.g., `">=2.0,<3.0"`) and checks the installed plugin version against it. An incompatible plugin emits a warning and is skipped — not a hard error.
+
+#### Item 10: Architectural Decisions
+
+**AD-10-1: `importlib.metadata` entry points, not a plugin directory scan**
+Rationale: Entry points are the PEP 517/518 standard for Python package extension. Any pip-installed package can register a plugin without modifying the PACE source tree. A directory scan would require plugins to be placed in a PACE-owned path.
+
+**AD-10-2: Synchronous `fire_hook()` with try/except isolation**
+Rationale: Async hooks introduce ordering complexity and make it hard to reason about pipeline state. Synchronous hooks fire in registration order and complete before the pipeline proceeds. The try/except around each call ensures a broken plugin never propagates an exception into the core pipeline.
+
+**AD-10-3: Webhook-in runs on a background daemon thread (port 9876)**
+Rationale: The HTTP listener must not block the main pipeline thread. A daemon thread terminates automatically when the main process exits — no explicit shutdown required.
+
+**AD-10-4: `PACE_VERSION` bumped to `"2.0.0"` in `config.py`**
+Rationale: The plugin system is the final feature completing the v2.0 feature set. The version constant is used by `_version_compatible()` and by plugins that need to check the running PACE version.
+
+#### Post-PR Fix
+
+**fix(config_tester): log exceptions in `_validate_plugins`** (commit `d327a30`, 2026-03-15)
+
+All four empty `except` clauses in `_validate_plugins` (two in the discovery loop, two in the compat-check loop) were silently swallowing exceptions. Fixed to bind the exception and emit `r.warn()` with plugin entry point name, group, and error message. Non-fatal behavior preserved.
+
+#### Item 10: Variations from Plan
+
+| ROADMAP Step | Planned | Actual | Status |
+| ------------ | ------- | ------ | ------ |
+| Webhook-in port | Not specified in plan | Port 9876 hardcoded | Acceptable default — configurable port deferred |
+| Integration test with real entry point | Planned | Not implemented in PR | Deferred to test infrastructure sprint |
+
+---
+
+## Post-Phase4 Stability Fixes (2026-03-15/16)
+
+Six fixes were merged directly to `main` between PR #11 (Plugin System) and PR #12 (Training Data Pipeline), addressing runtime failures found during live pipeline runs.
+
+| Commit | Change | Files |
+| ------ | ------ | ----- |
+| `879d24f` | `spend_tracker.install()` was called by `orchestrator.py` at import time but never implemented. No-op shim added — correct because `forge.py` routes all calls through the LLM adapter which calls `record()` explicitly | `pace/spend_tracker.py` |
+| `f7c5665` | Before creating a review PR, check if one already exists (any state) for the head branch; return existing URL instead of crashing with 422 | `pace/platforms/github.py` |
+| `463e305` | Add `git pull --rebase` before `git push` in FORGE and orchestrator — a fix commit pushed mid-run diverged the CI runner's local branch, burning all 100 iterations retrying `git_commit` | `pace/agents/forge.py`, `pace/orchestrator.py` |
+| `c6fb459` | Two bugs caused pipeline lock to falsely block: (1) FORGE's `git add -A` committed `.pace/pipeline.lock` to the repo; (2) `acquire_pipeline_lock` used `st_mtime` for age, which equals checkout time after `git checkout`. Fix: add `pipeline.lock` to `.gitignore`; use `started=` timestamp from file content for age | `.gitignore`, `pace/preflight.py` |
+| `62ecf98` | `git pull --rebase` aborted with "unstaged changes" because `pipeline.lock` left the working tree dirty. Add `--autostash` to stash before rebase and pop after | `pace/agents/forge.py`, `pace/orchestrator.py` |
+| `30b5caf` | `origin HEAD` resolves to `main` (the default branch), causing rebase to replay all sprint commits. Switch to tracking branch. Also `--autostash` only stashes tracked files — replace with `git stash -u` to cover untracked files like `pipeline.lock` | `pace/agents/forge.py`, `pace/orchestrator.py` |
+
+**Root cause:** All six fixes trace to the interaction between FORGE's git operations and the pipeline lock file. The core issue — `pipeline.lock` being committed to the repository — was the root; the autostash/tracking-branch fixes were downstream symptoms.
+
+---
+
 ## Phase 5 — Training Data Pipeline (@Since v2.2)
 
 ### Item 11 — Training Data Pipeline (PR #12 — branch `phase5/item-11-training-data-pipeline`)
@@ -760,8 +850,6 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 | `export_reward_jsonl()` prompt/completion/reward | ✅ |
 | `_validate_training()` covers all knobs | ✅ |
 | All 5 remaining `HOOK_EVENTS` fired | ✅ |
-
----
 
 ---
 
@@ -817,7 +905,8 @@ Platform adapter integration tests (Items 6, 7 deferred steps in Pending Work) r
 
 | Item | PR | Merged |
 | ---- | -- | ------ |
-| Item 9 (Config Tester) | #1 | ✅ 2026-03-14 |
+| fix/timestamp-precision (pre-ROADMAP) | #1 | ✅ 2026-03-08 |
+| Item 9 (Config Tester) | Direct commit `75f25b0` | ✅ 2026-03-13 |
 | Item 1 (Branching Model) | #2 | ✅ 2026-03-14 |
 | Item 2 (PACE Planner) | #3 | ✅ 2026-03-14 |
 | Item 3 (Context Versioning) | #4 | ✅ 2026-03-14 |
@@ -844,5 +933,5 @@ Platform adapter integration tests (Items 6, 7 deferred steps in Pending Work) r
 
 ---
 
-*ROADMAP Execution Log v1.8 — 2026-03-16 IST (ROADMAP v1.4: Phase 6 planned; unit test suite added; Item 11 merged)*
+*ROADMAP Execution Log v1.9 — 2026-03-16 IST (Phase 4 body added; post-Phase4 stability fixes documented; stale sections removed; Item 9 PR corrected)*
 *Author: Vipul Meehnia*
