@@ -2,7 +2,7 @@
 
 **Author:** Vipuul Meehniaa
 **Date:** 2026-03-13:19:09 (IST — Asia/Kolkata)
-**Roadmap Version:** 1.4 (revised 2026-03-16 IST — Phase 6 added: Architecture Maturity items 12–18; Item 7 status corrected)
+**Roadmap Version:** 1.5 (revised 2026-03-16 IST — all delivered item statuses updated to Merged; PR numbers added for Items 5, 6, 10, 11)
 **PACE Framework Baseline:** v2.0.0
 **Target Release:** PACE v3.0
 
@@ -36,7 +36,7 @@ This roadmap covers ten strategic improvements to the PACE framework, each asses
 
 ### Item 1: Sprint/Release Branching Model
 
-> **@Since** `v2.0-alpha` &nbsp;·&nbsp; **PR:** #2 &nbsp;·&nbsp; **Status:** Open
+> **@Since** `v2.0-alpha` &nbsp;·&nbsp; **PR:** #2 &nbsp;·&nbsp; **Status:** Merged
 > Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-1--sprintrelease-branching-model)
 
 **Assessment**
@@ -85,7 +85,7 @@ main
 
 ### Item 2: PACE Planner Pipeline
 
-> **@Since** `v2.0-alpha` &nbsp;·&nbsp; **PR:** #3 &nbsp;·&nbsp; **Status:** Open
+> **@Since** `v2.0-alpha` &nbsp;·&nbsp; **PR:** #3 &nbsp;·&nbsp; **Status:** Merged
 > Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-2--pace-planner-pipeline)
 
 **Assessment**
@@ -118,7 +118,7 @@ Extract Day-0 into a standalone, re-runnable **pace-planner** pipeline:
 
 ### Item 9: Configuration Tester
 
-> **@Since** `v2.0-alpha` &nbsp;·&nbsp; **PR:** #1 &nbsp;·&nbsp; **Status:** Open
+> **@Since** `v2.0-alpha` &nbsp;·&nbsp; **Direct commit** `75f25b0` &nbsp;·&nbsp; **Status:** Merged
 > Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-9--configuration-tester)
 
 **Assessment**
@@ -149,7 +149,7 @@ Build a `pace-config-test` CLI command and CI step that validates `pace.config.y
 
 ### Item 3: Context Versioning & Token Management
 
-> **@Since** `v2.0-beta` &nbsp;·&nbsp; **PR:** #4 &nbsp;·&nbsp; **Status:** Open
+> **@Since** `v2.0-beta` &nbsp;·&nbsp; **PR:** #4 &nbsp;·&nbsp; **Status:** Merged
 > Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-3--context-versioning--token-management)
 
 **Assessment**
@@ -194,7 +194,7 @@ Implement three complementary mechanisms:
 
 ### Item 4: Auto-Update Mechanism
 
-> **@Since** `v2.0-beta` &nbsp;·&nbsp; **PR:** #5 &nbsp;·&nbsp; **Status:** Open
+> **@Since** `v2.0-beta` &nbsp;·&nbsp; **PR:** #5 &nbsp;·&nbsp; **Status:** Merged
 > Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-4--auto-update-mechanism)
 
 **Assessment**
@@ -240,7 +240,7 @@ Add a daily version-check with customization-aware update behaviour:
 
 ### Item 8: Cron Configuration
 
-> **@Since** `v2.0-beta` &nbsp;·&nbsp; **PR:** #6 &nbsp;·&nbsp; **Status:** Open
+> **@Since** `v2.0-beta` &nbsp;·&nbsp; **PR:** #6 &nbsp;·&nbsp; **Status:** Merged
 > Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-8--cron-configuration)
 
 **Assessment**
@@ -278,7 +278,8 @@ The CI pipeline generators (GitHub, GitLab, Jenkins) read `cron` from `pace.conf
 
 ### Item 5: Communication & Alerting
 
-> **@Since** `v2.0-rc` &nbsp;·&nbsp; **Status:** Planned — not yet started
+> **@Since** `v2.0-rc` &nbsp;·&nbsp; **PR:** #7 &nbsp;·&nbsp; **Status:** Merged
+> Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-5--communications--alerting)
 
 **Assessment**
 
@@ -330,7 +331,8 @@ alerts:
 
 ### Item 6: Tracker Artifact Push & Issue Templates
 
-> **@Since** `v2.0-rc` &nbsp;·&nbsp; **Status:** Planned — not yet started
+> **@Since** `v2.0-rc` &nbsp;·&nbsp; **PR:** #8 &nbsp;·&nbsp; **Status:** Merged
+> Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-6--tracker-artifact-push)
 
 **Assessment**
 
@@ -386,7 +388,8 @@ Finalize pipeline templates and platform adapter implementations for GitLab, Jen
 
 ### Item 10: Plugin System
 
-> **@Since** `v2.1` &nbsp;·&nbsp; **Status:** Planned — not yet started
+> **@Since** `v2.1` &nbsp;·&nbsp; **PR:** #11 &nbsp;·&nbsp; **Status:** Merged
+> Variations from plan tracked in [ROADMAP-EXECUTION-LOG.md](ROADMAP-EXECUTION-LOG.md#item-10--plugin-system)
 
 **Assessment**
 
@@ -741,6 +744,8 @@ v3.0        ──►  Item 12 (Context Directory Versioning) [PLANNED]
 **Goal:** Instrument PACE to continuously collect and export high-quality LLM fine-tuning data from every shipped story, enabling future SFT and RLHF on PACE-generated code generation traces.
 
 ### Item 11 — Training Data Pipeline
+
+> **@Since** `v2.2` &nbsp;·&nbsp; **PR:** #12 &nbsp;·&nbsp; **Status:** Merged
 
 **Background:** Each PACE sprint day produces a structured triple that is exactly what is needed for LLM fine-tuning:
 
