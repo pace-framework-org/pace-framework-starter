@@ -2,7 +2,7 @@
 
 **Author:** Vipul Meehnia
 **Started:** 2026-03-13 (IST — Asia/Kolkata)
-**Log Version:** 1.9
+**Log Version:** 2.0
 **Aligned With:** ROADMAP v1.5
 
 ---
@@ -21,6 +21,7 @@
 | 1.7 | 2026-03-15 | Phase 5 implemented: Item 11 (Training Data Pipeline) PR open; ROADMAP extended to v1.3 |
 | 1.8 | 2026-03-16 | Item 11 (PR #12) confirmed merged; ROADMAP extended to v1.4 with Phase 6 (Items 12–18, Planned); Item 7 status corrected in ROADMAP; unit test suite added (223 tests, 82.76% coverage) |
 | 1.9 | 2026-03-16 | Add missing Phase 4 body section (Item 10 Plugin System); document post-Phase4 stability fixes; remove stale Pending Phase 1 Work section; correct Item 9 PR reference (direct commit, not PR #1) |
+| 2.0 | 2026-03-16 | Phase 6 formal execution plan: dependency order, sprint breakdown, branch naming, GitHub issues created (Items 12–18 + deferred steps); ROADMAP aligned to v1.5 |
 
 ---
 
@@ -898,6 +899,82 @@ All seven Phase 6 items are in `Planned` status. The ROADMAP was extended from v
 
 **Architectural decision — AD-TEST-1: No integration tests yet**
 Platform adapter integration tests (Items 6, 7 deferred steps in Pending Work) require live GitHub/GitLab/Bitbucket tokens and are left for a dedicated test infrastructure sprint. All 223 tests are unit tests using mocks for HTTP calls.
+
+---
+
+## Phase 6 — Architecture Maturity: Formal Execution Plan (2026-03-16)
+
+**Log entry type:** Execution plan — no code shipped yet
+**GitHub issues:** Created for all items (see issue links per item below)
+
+### Dependency Graph
+
+```text
+Item 17 (.pacemap Directory)
+  └─► Item 18 (CHANGELOG.md)           [pacemap.py required by update_changelog()]
+
+Item 14 (Multi-Release Config)
+  ├─► Item 12 (Context Versioning)     [active_release.name used for file archiving]
+  │     └─► Item 13 (Context Auto-Refresh) [context.manifest.yaml from Item 12]
+  ├─► Item 15 (plan.yaml & Story Naming)  [plan_file paths from releases: list]
+  └─► Item 16 (Extended Validation)    [validates Items 14 + 15 schemas]
+```
+
+### Sprint Breakdown
+
+| Sprint | Items | Branch Pattern | Key Deliverables |
+| ------ | ----- | -------------- | ---------------- |
+| 6.1 — Structural Foundation | 17, 18 | `feature/pacemap-directory`, `feature/changelog-md` | `.pacemap/` dir; `pace/pacemap.py`; `CHANGELOG.md` |
+| 6.2 — Config Schema | 14 | `feature/multi-release-config` | `ReleaseConfig` dataclass; `releases:` list; migration script |
+| 6.3 — Context System | 12, 13 | `feature/context-versioning`, `feature/context-auto-refresh` | `context.manifest.yaml`; SHA-256 hash checks; `--refresh-context` CLI |
+| 6.4 — Plan System | 15 | `feature/plan-story-naming` | `story-N` keys; `_backup_plan()`; migration script |
+| 6.5 — Validation | 16 | `feature/extended-validation` | `--strict` mode; `_validate_releases()`; CI pipeline updates |
+
+### Items & GitHub Issues
+
+| Item | Title | Sprint | GitHub Issue |
+| ---- | ----- | ------ | ------------ |
+| 12 | Release-Scoped Context Directory Versioning | 6.3 | #13 |
+| 13 | Context Auto-Refresh on Document Updates | 6.3 | #14 |
+| 14 | Multi-Release Configuration | 6.2 | #15 |
+| 15 | plan.yaml Versioning & Story Naming | 6.4 | #16 |
+| 16 | Pre-run Configuration Validation (Extended) | 6.5 | #17 |
+| 17 | `.pacemap` Directory | 6.1 | #18 |
+| 18 | CHANGELOG.md | 6.1 | #19 |
+| — | Deferred Steps Sprint (Items 1–8 carry-overs) | Pre-6.1 | #20 |
+
+### Deferred Steps Tracked in Issue #20
+
+| Source | Step | Description |
+| ------ | ---- | ----------- |
+| Item 1, step 5 | Phase 3 | CONDUIT: staging CI gate → main PR flow |
+| Item 1, step 6 | Phase 3 | `preflight.py` branch-protection checks |
+| Item 2, step 3 | Phase 3 | PRIME `plan_mode` flag (structured re-plan diff) |
+| Item 2, step 5 | Phase 3 | SCRIBE planning report (budget impact + scope delta) |
+| Item 3, step 6 | Phase 3 | Per-call retry with compacted prompt on token limit |
+| Item 4, step 7 | Phase 3 | CONDUIT version-update summary in daily report |
+| Item 4, tutorial URL | Phase 3 | Replace `pace-docs.example.com` placeholder in `updater.py` |
+| Item 8, step 5 | Phase 2 follow-up | `config_tester.py` ↔ `ci_generator.py` cross-wire suggestion |
+| Item 5, `update_available` | Phase 3 | Wire event into `updater.py` lifecycle |
+| Items 6, 7 integration tests | Phase 3 | Platform adapter test fixtures (requires live tokens) |
+| Item 10, webhook-in port | Phase 4 | Configurable webhook-in port (currently hardcoded 8765) |
+
+### Architectural Decisions — Phase 6 Planning
+
+**AD-P6-1: Deliver Items 17+18 first**
+`.pacemap/` reorganises the ROADMAP files into a managed directory and creates `pacemap.py`. Since Item 18 (CHANGELOG) uses `pacemap.py`, Item 17 must ship first. These two items are pure file-system changes with no config schema dependency.
+
+**AD-P6-2: Item 14 (Multi-Release) is the critical path blocker**
+Items 12, 13, 15, and 16 all consume `cfg.active_release`. Item 14 ships in Sprint 6.2 before any of those begin, to avoid rebasing conflicts on the config schema.
+
+**AD-P6-3: Items 12 and 13 ship in the same sprint but separate PRs**
+Item 13 reads `context.manifest.yaml` written by Item 12. They are developed together but merged sequentially (12 first, then 13) to keep each PR reviewable independently.
+
+**AD-P6-4: All Phase 6 items are breaking changes**
+`plan.yaml` keys change (`day-N` → `story-N`), config schema changes (`release:` → `releases:`), and context directory layout changes. Migration scripts are mandatory deliverables for all three breaking items (12, 14, 15). A `MIGRATION_GUIDE.md` will be added to `.pacemap/` as part of Sprint 6.1.
+
+**AD-P6-5: Deferred steps sprint is pre-Phase-6**
+Deferred steps are isolated fixes to already-delivered items and have no dependency on Phase 6 schema changes. They will be batched into a single `feature/deferred-steps-cleanup` branch and merged before Sprint 6.1 begins.
 
 ---
 
