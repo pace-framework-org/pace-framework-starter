@@ -2,8 +2,8 @@
 
 **Author:** Vipul Meehnia
 **Started:** 2026-03-13 (IST — Asia/Kolkata)
-**Log Version:** 1.7
-**Aligned With:** ROADMAP v1.3
+**Log Version:** 1.8
+**Aligned With:** ROADMAP v1.4
 
 ---
 
@@ -19,6 +19,7 @@
 | 1.5 | 2026-03-15 | Phase 3 complete: Item 7 (PR #10) merged; Phase 4 (Item 10 Plugin System) started |
 | 1.6 | 2026-03-15 | Phase 4 complete: Item 10 (PR #11) merged; all 4 ROADMAP phases delivered |
 | 1.7 | 2026-03-15 | Phase 5 implemented: Item 11 (Training Data Pipeline) PR open; ROADMAP extended to v1.3 |
+| 1.8 | 2026-03-16 | Item 11 (PR #12) confirmed merged; ROADMAP extended to v1.4 with Phase 6 (Items 12–18, Planned); Item 7 status corrected in ROADMAP; unit test suite added (223 tests, 82.76% coverage) |
 
 ---
 
@@ -762,6 +763,56 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 
 ---
 
+---
+
+## ROADMAP v1.4 Update (2026-03-16)
+
+### Phase 6 — Architecture Maturity (@Since v3.0): Planning
+
+**Log entry type:** ROADMAP planning (no code shipped in this update)
+
+All seven Phase 6 items are in `Planned` status. The ROADMAP was extended from v1.3 → v1.4 to capture them before implementation begins.
+
+| Item | Title | Target |
+| ---- | ----- | ------ |
+| Item 12 | `context.manifest.yaml` — SHA-256 doc hashing + change detection | v3.0 |
+| Item 13 | Context auto-refresh on PRD/SRS document changes | v3.0 |
+| Item 14 | Multi-release `releases:` list config | v3.0 |
+| Item 15 | `plan.yaml` versioning + `story-N` rename | v3.0 |
+| Item 16 | Extended pre-run validation (`--strict` mode) | v3.0 |
+| Item 17 | `.pacemap/` directory for ROADMAP snapshots | v3.0 |
+| Item 18 | `CHANGELOG.md` auto-update by planner + orchestrator | v3.0 |
+
+**Item 7 status correction:** ROADMAP v1.3 incorrectly listed Item 7 as `Planned — not yet started`. Item 7 (Platform Finalization) was implemented in Phase 3, merged via PR #10 on 2026-03-14. Corrected in ROADMAP v1.4.
+
+---
+
+## Unit Test Suite (2026-03-16)
+
+**Not tied to a ROADMAP item.** Added as a cross-cutting quality baseline before Phase 6 development begins.
+
+| File | Tests | Coverage target |
+| ---- | ----- | --------------- |
+| `tests/test_config.py` | 27 | `pace/config.py` |
+| `tests/test_ci_generator.py` | 53 | `pace/ci_generator.py` |
+| `tests/test_platforms_factory.py` | 19 | `pace/platforms/` factory + local adapter |
+| `tests/test_platforms_local.py` | 51 | GitHub / GitLab / Bitbucket adapters |
+| `tests/test_plugins_base.py` | 22 | `pace/plugins/base.py` |
+| `tests/test_small_utils.py` | 38 | Branching helpers, spend tracker utils, misc |
+| `tests/test_spend_tracker.py` | 28 | `pace/spend_tracker.py` |
+| `tests/test_training_collector.py` | 44 | `pace/training/collector.py` |
+| `tests/test_training_exporter.py` | 36 | `pace/training/exporter.py` |
+| `tests/test_training_hook.py` | 27 | `pace/training/hook.py` |
+
+**Total: 223 tests. Coverage baseline: 82.76% (recorded in `.audit/coverage/baseline.md`).**
+
+`setup.cfg` adds `testpaths = tests` and omits `tests/`, `pace/agents/`, `pace/pace.config.yaml`, and `migrations/` from coverage measurement.
+
+**Architectural decision — AD-TEST-1: No integration tests yet**
+Platform adapter integration tests (Items 6, 7 deferred steps in Pending Work) require live GitHub/GitLab/Bitbucket tokens and are left for a dedicated test infrastructure sprint. All 223 tests are unit tests using mocks for HTTP calls.
+
+---
+
 ## Merged to Main
 
 | Item | PR | Merged |
@@ -776,7 +827,7 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 | Item 6 (Tracker Artifact Push) | #8 | ✅ 2026-03-14 |
 | Item 7 (Platform Finalization) | #10 | ✅ 2026-03-15 |
 | Item 10 (Plugin System) | #11 | ✅ 2026-03-15 |
-| Item 11 (Training Data Pipeline) | #12 | 🔄 PR open |
+| Item 11 (Training Data Pipeline) | #12 | ✅ 2026-03-15 |
 
 ## Pending Work
 
@@ -793,5 +844,5 @@ When all PRs are eventually merged to `main`, the canonical `PaceConfig` will co
 
 ---
 
-*ROADMAP Execution Log v1.7 — 2026-03-15 IST (Phase 5 implemented: v2.2 Training Data Pipeline)*
+*ROADMAP Execution Log v1.8 — 2026-03-16 IST (ROADMAP v1.4: Phase 6 planned; unit test suite added; Item 11 merged)*
 *Author: Vipul Meehnia*
