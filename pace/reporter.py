@@ -19,6 +19,18 @@ PLAN_FILE = Path(__file__).parent / "plan.yaml"
 RESULT_ICON = {"SHIP": "✅", "HOLD": "🔴", "ABORT": "⚠️", "PENDING": "⏳", "PLAN": "📋"}
 
 
+def _load_update_status() -> dict | None:
+    """Return update status dict from .pace/update_status.yaml, or None if absent."""
+    status_file = PACE_DIR / "update_status.yaml"
+    if not status_file.exists():
+        return None
+    try:
+        import json as _json
+        return _json.loads(status_file.read_text())
+    except Exception:
+        return None
+
+
 def _load_plan() -> dict:
     with open(PLAN_FILE) as f:
         return yaml.safe_load(f)
@@ -256,6 +268,24 @@ def write_job_summary(
         f"| Escalated holds | {stats['escalated']} |",
         f"| Open advisories | {open_advisories} |",
     ]
+
+    # Item 4 deferred step 7: include PACE version update notice when available
+    update_status = _load_update_status()
+    if update_status and update_status.get("update_available"):
+        new_ver = update_status.get("new_version", "?")
+        cur_ver = update_status.get("current_version", "?")
+        note = update_status.get("customization_note", "")
+        lines += [
+            f"",
+            f"---",
+            f"",
+            f"## ⬆️ PACE Update Available",
+            f"",
+            f"**{new_ver}** is available (installed: {cur_ver}).",
+            f"",
+            f"> {note}",
+            f"",
+        ]
 
     markdown = "\n".join(lines)
 

@@ -49,6 +49,52 @@ def _run_update_check() -> None:
         print(f"[PACE] Update check skipped: {exc}")
 
 
+def _check_branch_protection() -> None:
+    """Warn if the default GitHub branch lacks protection rules. Non-fatal."""
+    token = os.environ.get("GITHUB_TOKEN", "")
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    if not token or not repo:
+        return  # Not GitHub or credentials missing — skip silently
+
+    try:
+        import urllib.request
+        import json as _json
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        def _gh_get(url: str) -> dict | None:
+            req = urllib.request.Request(url, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    return _json.loads(resp.read().decode())
+            except urllib.error.HTTPError as e:
+                return {"_status": e.code}
+            except Exception:
+                return None
+
+        repo_data = _gh_get(f"https://api.github.com/repos/{repo}")
+        if not repo_data or "_status" in repo_data:
+            return
+        default_branch = repo_data.get("default_branch", "main")
+
+        protection = _gh_get(
+            f"https://api.github.com/repos/{repo}/branches/{default_branch}/protection"
+        )
+        if protection and protection.get("_status") == 404:
+            print(
+                f"[PACE] WARNING: Branch '{default_branch}' has no protection rules. "
+                "Consider enabling branch protection to prevent direct pushes."
+            )
+        elif protection and "_status" not in protection:
+            print(f"[PACE] Branch '{default_branch}' is protected.")
+    except Exception:
+        pass  # Non-fatal — branch protection check must never block the pipeline
+
+
 def acquire_pipeline_lock() -> None:
     """Write .pace/pipeline.lock with current PID and timestamp.
 
@@ -121,6 +167,9 @@ def run_preflight(day: int) -> None:
 
     # Auto-update check (Item 4) — runs before SCRIBE to surface version info early
     _run_update_check()
+
+    # Branch protection check (Item 1 deferred step 6) — non-fatal advisory
+    _check_branch_protection()
 
     missing = _missing_docs()
 
