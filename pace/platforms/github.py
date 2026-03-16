@@ -119,13 +119,30 @@ Merge this PR to proceed to Day {day + 1}, or close it to pause the cycle.
             resp.raise_for_status()
             default_branch = resp.json().get("default_branch", "main")
 
+            head_branch = f"pace/review-day-{day}"
+
+            # Check if a PR already exists (open or merged) for this head branch
+            existing_resp = _requests.get(
+                self._api("pulls"),
+                headers=self._headers(),
+                params={"head": f"{self._repo.split('/')[0]}:{head_branch}", "state": "all"},
+                timeout=15,
+            )
+            if existing_resp.ok:
+                existing = existing_resp.json()
+                if existing:
+                    url = existing[0].get("html_url", "")
+                    state = existing[0].get("state", "")
+                    print(f"[GitHub] Review PR already exists ({state}): {url}")
+                    return url
+
             resp = _requests.post(
                 self._api("pulls"),
                 headers=self._headers(),
                 json={
                     "title": f"[PACE Review Gate] {period}",
                     "body": body,
-                    "head": f"pace/review-day-{day}",
+                    "head": head_branch,
                     "base": default_branch,
                 },
                 timeout=15,
