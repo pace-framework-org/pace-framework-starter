@@ -812,5 +812,5 @@ This is deferred to post-v2.1 because it requires a minimum viable dataset that 
 
 ---
 
-*PACE Framework Roadmap v1.4 — 2026-03-16 IST*
+*PACE Framework Roadmap v1.5 — 2026-03-16 IST*
 *Author: Vipuul Meehniaa*

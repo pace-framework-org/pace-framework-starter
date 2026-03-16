@@ -1,0 +1,82 @@
+name: PACE HOLD Escalation
+description: Escalate a blocker that has put a PACE plan into HOLD state
+title: "[HOLD] "
+labels: ["hold", "escalation", "priority"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template when a PACE plan has entered **HOLD** state and requires human intervention to unblock.
+
+  - type: input
+    id: plan_id
+    attributes:
+      label: Plan ID / Plan File
+      description: The plan.yaml filename or identifier that is on HOLD
+      placeholder: "e.g. plans/feature-xyz/plan.yaml or story-3"
+    validations:
+      required: true
+
+  - type: input
+    id: pace_version
+    attributes:
+      label: PACE Framework Version
+      placeholder: "e.g. v2.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hold_reason
+    attributes:
+      label: HOLD Reason Category
+      description: Why did PACE raise a HOLD?
+      multiple: false
+      options:
+        - Ambiguous requirement — needs clarification
+        - External dependency blocked (API, service, credential)
+        - Conflicting instructions in plan
+        - Test failure — human review required
+        - Budget / spend limit reached
+        - Security concern flagged by agent
+        - PR review required before proceeding
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: hold_message
+    attributes:
+      label: HOLD Message from PACE
+      description: Paste the exact HOLD message or log entry that triggered this escalation
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Plan Context
+      description: What was the plan trying to accomplish? What step did it reach before HOLDing?
+      placeholder: |
+        Goal: ...
+        Last completed step: ...
+        Blocking step: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: resolution
+    attributes:
+      label: Proposed Resolution
+      description: What action do you want taken to unblock this? Or what decision is needed?
+    validations:
+      required: true
+
+  - type: input
+    id: deadline
+    attributes:
+      label: Urgency / Deadline
+      description: When does this need to be resolved?
+      placeholder: "e.g. Before EOD 2026-03-20, or Not urgent"

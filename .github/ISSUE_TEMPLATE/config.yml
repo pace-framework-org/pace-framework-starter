@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: PACE Documentation
+    url: https://github.com/vmeehnia/pace-docs
+    about: Check the docs before opening an issue — your question may already be answered.

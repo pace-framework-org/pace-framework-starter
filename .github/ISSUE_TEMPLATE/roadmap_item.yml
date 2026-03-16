@@ -1,0 +1,96 @@
+name: Roadmap Item
+description: Propose a new roadmap item or architectural change for the PACE framework
+title: "[ROADMAP] "
+labels: ["roadmap", "enhancement"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to propose a new capability, architectural change, or improvement for the PACE framework roadmap.
+
+  - type: input
+    id: item_title
+    attributes:
+      label: Item Title
+      description: Short descriptive name for the roadmap item (used as the ROADMAP.md entry title)
+      placeholder: "e.g. context.manifest.yaml — stable context contract"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Target Phase
+      description: Which roadmap phase does this belong to?
+      multiple: false
+      options:
+        - Phase 1 — Foundation
+        - Phase 2 — Intelligence
+        - Phase 3 — Quality
+        - Phase 4 — Plugin Ecosystem
+        - Phase 5 — Training Data Pipeline
+        - Phase 6 — Architecture Maturity
+        - New Phase (describe below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      multiple: false
+      options:
+        - P0 — Critical / Blocking
+        - P1 — High
+        - P2 — Medium
+        - P3 — Low / Nice-to-have
+    validations:
+      required: true
+
+  - type: input
+    id: since_version
+    attributes:
+      label: Target Release Version (@Since)
+      description: Which PACE version should this land in?
+      placeholder: "e.g. v3.0 or v2.3"
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation / Problem Statement
+      description: Why does this need to exist? What problem does it solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Proposed Solution
+      description: What should be built? Describe the feature, API surface, or architectural change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: How will we know this item is done?
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: trade_offs
+    attributes:
+      label: Known Trade-offs / Risks
+      description: Any downsides, complications, or deferred work this might create?
+
+  - type: textarea
+    id: related
+    attributes:
+      label: Related Items / PRs / Issues
+      description: Link any related roadmap items, PRs, or GitHub issues
