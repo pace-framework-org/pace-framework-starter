@@ -139,7 +139,7 @@ def _tool_run_bash(command: str) -> str:
 
 def _tool_git_commit(message: str) -> str:
     result = subprocess.run(
-        f'git add -A && git commit -m {shlex.quote(message)} && git pull --rebase --autostash origin HEAD && git push origin HEAD',
+        f'git add -A && git commit -m {shlex.quote(message)} && (git stash -u || true) && git pull --rebase && (git stash pop || true) && git push origin HEAD',
         shell=True,
         capture_output=True,
         text=True,
