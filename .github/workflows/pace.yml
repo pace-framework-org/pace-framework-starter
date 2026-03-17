@@ -65,7 +65,7 @@ jobs:
       # ---------------------------------------------------------------------------
 
       - name: Validate PACE configuration
-        run: python pace/config_tester.py
+        run: python pace/config_tester.py --strict
 
       - name: Check daily budget
         id: budget_check

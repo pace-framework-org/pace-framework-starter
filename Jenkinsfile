@@ -56,7 +56,7 @@ pipeline {
 
         stage('Validate Config') {
             steps {
-                sh 'python pace/config_tester.py'
+                sh 'python pace/config_tester.py --strict'
             }
         }
 

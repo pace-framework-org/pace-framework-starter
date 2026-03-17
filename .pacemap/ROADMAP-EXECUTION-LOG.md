@@ -1133,5 +1133,25 @@ All 11 deferred steps across Items 1–8 implemented:
 | 5 | `pace/config_tester.py` | `_validate_plan()` — warns on missing `release` field and shipped stories without `shipped_at` |
 | 6 | `pace/migrations/v3_plan_naming.py` | New migration: renames `day-N` entries to `story-N`; adds `status: shipped` based on `.pace/day-N/handoff.yaml`; supports `--dry-run` |
 
-*ROADMAP Execution Log v2.6 — 2026-03-17 IST (Sprint 6.3 Items 12–15 documented)*
+---
+
+### Sprint 6.3 — Item 16: Pre-run Configuration Validation (Extended) (2026-03-17)
+
+**Branch:** `feature/extended-validation`
+**Issue:** #19
+**Tests:** 378 passing, 83% coverage (14 new in `tests/test_extended_validation.py`)
+
+| Step | File | Change |
+| ---- | ---- | ------ |
+| 2 | `pace/config_tester.py` | `_validate_plan_files()` — for each active/completed release with a `plan_file`, checks file exists, parses as valid YAML, and contains `release` + `stories`/`days` keys |
+| 4 | `pace/config_tester.py` | `--strict` CLI flag — promotes all warnings to errors (exit code 2); suitable for CI preflight gates |
+| 5 | `pace/config_tester.py` | `--release <name>` CLI flag — restricts `_validate_plan_files()` to the named release only |
+| 6 | `.github/workflows/pace.yml` | Added `--strict` to `python pace/config_tester.py` step |
+| 6 | `.gitlab-ci.yml` | Added `--strict` to `python pace/config_tester.py` step |
+| 6 | `Jenkinsfile` | Added `--strict` to `sh 'python pace/config_tester.py'` step |
+| 6 | `bitbucket-pipelines.yml` | Added `--strict` to `python pace/config_tester.py` step |
+
+*Note: Step 1 (`_validate_releases`) and Step 3 (`_validate_cross_fields`) were already delivered by Item 14.*
+
+*ROADMAP Execution Log v2.7 — 2026-03-17 IST (Sprint 6.3 Items 12–16 documented)*
 *Author: Vipul Meehnia*

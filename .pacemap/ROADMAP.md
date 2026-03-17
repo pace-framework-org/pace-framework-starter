@@ -604,7 +604,7 @@ Re-plan contract:
 
 ### Item 16: Pre-run Configuration Validation (Extended)
 
-> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Planned
+> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Merged — PR #29 (2026-03-17)
 > Extends Item 9 (Configuration Tester) with multi-release and cross-field validation.
 
 #### Assessment
@@ -739,7 +739,7 @@ v3.0        ──►  Item 12 (Context Directory Versioning) [PLANNED]
                  Item 13 (Context Auto-Refresh)         [PLANNED]
                  Item 14 (Multi-Release Configuration)  [PLANNED]
                  Item 15 (plan.yaml & Story Naming)     [MERGED PR #28]
-                 Item 16 (Pre-run Validation Extended)  [PLANNED]
+                 Item 16 (Pre-run Validation Extended)  [MERGED PR #29]
                  Item 17 (.pacemap Directory)            [PLANNED]
                  Item 18 (CHANGELOG.md)                 [PLANNED]
 ```
