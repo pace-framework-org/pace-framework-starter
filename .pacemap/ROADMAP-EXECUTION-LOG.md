@@ -995,7 +995,7 @@ Deferred steps are isolated fixes to already-delivered items and have no depende
 | Item 10 (Plugin System) | #11 | ✅ 2026-03-15 |
 | Item 11 (Training Data Pipeline) | #12 | ✅ 2026-03-15 |
 | Deferred Steps Cleanup (Items 1–8) | #21 | ✅ 2026-03-16 |
-| fix/pace-planner-yaml-syntax | #22 | 🔄 2026-03-17 (PR open) |
+| fix/pace-planner-yaml-syntax | #22 | ✅ 2026-03-17 |
 | Item 17 (.pacemap Directory) | #TBD | 🔄 2026-03-17 (PR open) |
 
 ## Pending Work
@@ -1049,5 +1049,17 @@ All 11 deferred steps across Items 1–8 implemented:
 
 ---
 
-*ROADMAP Execution Log v2.2 — 2026-03-17 IST (Sprint 6.1 Item 17 documented; .pacemap/ directory established; file moved from repo root)*
+### fix/pace-planner-yaml-syntax — Fix Entry (2026-03-17)
+
+**Branch:** `fix/pace-planner-yaml-syntax`
+**Tests:** 257 passing, 83% coverage (no new tests — pure workflow YAML change)
+
+| File | Change |
+| ---- | ------ |
+| `.github/workflows/pace-planner.yml` | Replace multi-line `git commit -m "..."` (column-0 body broke YAML block scalar) with single-line `printf` form |
+| `.github/workflows/pace-planner.yml` | Replace bash heredoc `<<'PRBODY'` in `run:` block with `PR_BODY` env-var block scalar (column-0 heredoc content terminated YAML block scalar prematurely) |
+
+---
+
+*ROADMAP Execution Log v2.2 — 2026-03-17 IST (Sprint 6.1 Item 17 documented; YAML fix entry absorbed from main; .pacemap/ directory established)*
 *Author: Vipul Meehnia*

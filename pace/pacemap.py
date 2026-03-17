@@ -145,9 +145,8 @@ def snapshot_roadmap_if_version_changed(previous_text: str, current_text: str) -
 # ---------------------------------------------------------------------------
 
 _UNRELEASED_HEADING = "## [Unreleased]"
-_UNRELEASED_BLOCK_RE = re.compile(
-    r"(## \[Unreleased\])(.*?)(?=\n## \[|\Z)", re.DOTALL
-)
+# Pattern string for the Unreleased block (for documentation / future use).
+_UNRELEASED_BLOCK_PATTERN = r"(## \[Unreleased\])(.*?)(?=\n## \[|\Z)"
 
 
 def _today_iso() -> str:
