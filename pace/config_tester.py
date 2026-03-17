@@ -615,8 +615,20 @@ def run_config_test(config_file: Path = CONFIG_FILE) -> ConfigTestResult:
     _validate_cron(raw, r)
     _validate_reporter(raw, r)
     _validate_training(raw, r)
+    _validate_changelog(r)
 
     return r
+
+
+def _validate_changelog(r: ConfigTestResult) -> None:
+    """Warn when CHANGELOG.md is absent from the repository root (Item 18)."""
+    changelog = Path(__file__).parent.parent / "CHANGELOG.md"
+    if not changelog.exists():
+        r.warn(
+            "CHANGELOG.md not found at the repository root — "
+            "create one so users can track changes between framework versions. "
+            "See .pacemap/ROADMAP.md Item 18."
+        )
 
 
 def _print_result(r: ConfigTestResult, as_json: bool = False) -> None:

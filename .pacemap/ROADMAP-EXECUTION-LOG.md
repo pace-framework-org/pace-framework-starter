@@ -996,14 +996,14 @@ Deferred steps are isolated fixes to already-delivered items and have no depende
 | Item 11 (Training Data Pipeline) | #12 | ✅ 2026-03-15 |
 | Deferred Steps Cleanup (Items 1–8) | #21 | ✅ 2026-03-16 |
 | fix/pace-planner-yaml-syntax | #22 | 🔄 2026-03-17 (PR open) |
-| Item 17 (.pacemap Directory) | #TBD | 🔄 2026-03-17 (PR open) |
+| Item 17 (.pacemap Directory) | #23 | 🔄 2026-03-17 (PR open) |
+| Item 18 (CHANGELOG.md) | #TBD | 🔄 2026-03-17 (PR open) |
 
 ## Pending Work
 
 | Item | Status | Next Action |
 | ---- | ------ | ----------- |
-| Sprint 6.1 — Item 18 (CHANGELOG.md) | Up next | `feature/changelog-md` |
-| Sprint 6.2 — Item 14 (Multi-Release) | Blocked on 6.1 | `feature/multi-release-config` |
+| Sprint 6.2 — Item 14 (Multi-Release) | Blocked on 6.1 merge | `feature/multi-release-config` |
 | Sprint 6.3 — Items 12, 13, 15, 16 | Blocked on 6.2 | pending |
 | Integration tests (Items 6, 7) | Not started | Platform adapter fixtures |
 
@@ -1049,5 +1049,21 @@ All 11 deferred steps across Items 1–8 implemented:
 
 ---
 
-*ROADMAP Execution Log v2.2 — 2026-03-17 IST (Sprint 6.1 Item 17 documented; .pacemap/ directory established; file moved from repo root)*
+### Sprint 6.1 — Item 18: CHANGELOG.md (2026-03-17)
+
+**Branch:** `feature/changelog-md` (based on `feature/pacemap-directory`)
+**Issue:** #14
+**Tests:** 288 passing, 83% coverage (10 new in `tests/test_changelog.py`)
+
+| Step | File | Change |
+| ---- | ---- | ------ |
+| 1 | `CHANGELOG.md` | Created at repo root with full history from v1.0.0 through v2.1.0 |
+| 2 | `pace/pacemap.py` | `update_changelog()` and `update_changelog_story_shipped()` (co-located in Item 17 module) |
+| 3 | `pace/planner.py` | `_record_planned_stories_in_changelog()` called from `run_pipeline()` on completion |
+| 4 | `pace/orchestrator.py` | `_update_changelog_on_ship()` called on SHIP — appends story to `## [Unreleased]` |
+| 5 | `pace/config_tester.py` | `_validate_changelog()` — warns when `CHANGELOG.md` absent from repo root |
+
+---
+
+*ROADMAP Execution Log v2.3 — 2026-03-17 IST (Sprint 6.1 complete: Items 17 + 18 shipped; Sprint 6.2 unblocked pending PR merges)*
 *Author: Vipul Meehnia*
