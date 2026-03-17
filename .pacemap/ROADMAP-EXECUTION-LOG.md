@@ -994,14 +994,36 @@ Deferred steps are isolated fixes to already-delivered items and have no depende
 | Item 7 (Platform Finalization) | #10 | ✅ 2026-03-15 |
 | Item 10 (Plugin System) | #11 | ✅ 2026-03-15 |
 | Item 11 (Training Data Pipeline) | #12 | ✅ 2026-03-15 |
-| Deferred Steps Cleanup (Items 1–8) | #TBD | 🔄 2026-03-16 (PR open) |
+| Deferred Steps Cleanup (Items 1–8) | #21 | ✅ 2026-03-16 |
+| fix/pace-planner-yaml-syntax | #22 | 🔄 2026-03-17 (PR open) |
+| Item 17 (.pacemap Directory) | #TBD | 🔄 2026-03-17 (PR open) |
 
 ## Pending Work
 
 | Item | Status | Next Action |
 | ---- | ------ | ----------- |
-| Phase 6 (Items 12–18) | Blocked | Merge deferred-steps-cleanup PR first |
+| Sprint 6.1 — Item 18 (CHANGELOG.md) | Up next | `feature/changelog-md` |
+| Sprint 6.2 — Item 14 (Multi-Release) | Blocked on 6.1 | `feature/multi-release-config` |
+| Sprint 6.3 — Items 12, 13, 15, 16 | Blocked on 6.2 | pending |
 | Integration tests (Items 6, 7) | Not started | Platform adapter fixtures |
+
+---
+
+### Sprint 6.1 — Item 17: .pacemap Directory (2026-03-17)
+
+**Branch:** `feature/pacemap-directory`
+**Issue:** #13
+**Tests:** 278 passing, 83% coverage (21 new in `tests/test_pacemap.py`)
+
+| Step | File | Change |
+| ---- | ---- | ------ |
+| 1 | `.pacemap/ROADMAP.md` | Moved from repo root via `git mv` |
+| 1 | `.pacemap/ROADMAP-EXECUTION-LOG.md` | Moved from repo root via `git mv` |
+| 2 | `pace/pacemap.py` | New module: `snapshot_roadmap()`, `snapshot_roadmap_if_version_changed()` |
+| 3 | `pace/config_tester.py` | Updated cross-references from `ROADMAP.md` → `.pacemap/ROADMAP.md` |
+| 4 | `pace/ci_generator.py` | `_maybe_snapshot_roadmap()` called from `generate(apply=True)` |
+| 5 | `.gitignore` | Verified `.pacemap/` is not ignored |
+| — | `pace/pacemap.py` | Also includes Item 18 CHANGELOG helpers (`update_changelog`, `update_changelog_story_shipped`) |
 
 ---
 
@@ -1027,5 +1049,5 @@ All 11 deferred steps across Items 1–8 implemented:
 
 ---
 
-*ROADMAP Execution Log v2.0 — 2026-03-16 IST (Deferred Steps Cleanup sprint documented; Phase 6 unblocked pending PR merge)*
+*ROADMAP Execution Log v2.2 — 2026-03-17 IST (Sprint 6.1 Item 17 documented; .pacemap/ directory established; file moved from repo root)*
 *Author: Vipul Meehnia*
