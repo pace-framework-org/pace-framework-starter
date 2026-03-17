@@ -109,6 +109,13 @@ def run_planner(plan: dict, model: str, replan: bool = False) -> dict:
         replan: When True, preserve actuals for completed days and only re-estimate
                 days that have not yet been completed.
     """
+    if replan:
+        # Item 13: refresh context if source docs changed before re-planning
+        try:
+            from preflight import _check_context_freshness
+            _check_context_freshness()
+        except Exception as exc:
+            print(f"[PACE] Warning: context freshness check skipped in planner: {exc}")
     day_0_dir = PACE_DIR / "day-0"
     day_0_dir.mkdir(parents=True, exist_ok=True)
 

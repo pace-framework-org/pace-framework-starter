@@ -1096,5 +1096,23 @@ All 11 deferred steps across Items 1–8 implemented:
 | 4 | `pace/migrations/v3_context_versioning.py` | Migration: archives unversioned docs as `*.pre-v3.md`; supports `--dry-run` |
 | 5 | `pace/config_tester.py` | `_validate_context_manifest()` — warns if context docs exist with no manifest or have untracked files |
 
-*ROADMAP Execution Log v2.4 — 2026-03-17 IST (Sprint 6.3 Item 12 documented)*
+---
+
+### Sprint 6.3 — Item 13: Context Auto-Refresh on Document Updates (2026-03-17)
+
+**Branch:** `feature/context-auto-refresh`
+**Issue:** #17
+**Tests:** 335 passing, 83% coverage (14 new in `tests/test_context_auto_refresh.py`)
+
+| Step | File | Change |
+| ---- | ---- | ------ |
+| 1 | `pace/preflight.py` | `_archive_context(release_name, reason)` — moves context docs to `<stem>.<release>.<iso-date>.md`; handles same-day collision with counter; archives manifest |
+| 2 | `pace/preflight.py` | `_check_context_freshness()` — reads manifest hashes, computes current SHA-256 of source docs, triggers `_archive_context` + SCRIBE on any change; returns list of changed docs |
+| 3 | `pace/preflight.py` | Refactored `_archive_context_for_release_change()` to delegate to `_archive_context()` |
+| 4 | `pace/preflight.py` | `force_refresh_context()` — unconditional archive + SCRIBE; exposed via `--refresh-context` CLI flag in `__main__` block |
+| 5 | `pace/preflight.py` | `run_preflight()` now calls `_check_context_freshness()` after `_archive_context_for_release_change()` |
+| 6 | `pace/planner.py` | `run_planner()` calls `_check_context_freshness()` when `replan=True` |
+| 7 | `pace/config_tester.py` | `_KNOWN_SOURCE_DOCS` list + `_validate_source_docs()` — suggests adding README/PRD/SRS when none found in repo root |
+
+*ROADMAP Execution Log v2.5 — 2026-03-17 IST (Sprint 6.3 Items 12 + 13 documented)*
 *Author: Vipul Meehnia*
