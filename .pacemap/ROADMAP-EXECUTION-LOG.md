@@ -997,14 +997,14 @@ Deferred steps are isolated fixes to already-delivered items and have no depende
 | Deferred Steps Cleanup (Items 1–8) | #21 | ✅ 2026-03-16 |
 | fix/pace-planner-yaml-syntax | #22 | ✅ 2026-03-17 |
 | Item 17 (.pacemap Directory) | #TBD | 🔄 2026-03-17 (PR open) |
+| Item 18 (CHANGELOG.md) | #TBD | 🔄 2026-03-17 (PR open, conflicts) |
+| Item 14 (Multi-Release Config) | #15 | 🔄 2026-03-17 (PR open) |
 
 ## Pending Work
 
 | Item | Status | Next Action |
 | ---- | ------ | ----------- |
-| Sprint 6.1 — Item 18 (CHANGELOG.md) | Up next | `feature/changelog-md` |
-| Sprint 6.2 — Item 14 (Multi-Release) | Blocked on 6.1 | `feature/multi-release-config` |
-| Sprint 6.3 — Items 12, 13, 15, 16 | Blocked on 6.2 | pending |
+| Sprint 6.3 — Items 12, 13, 15, 16 | Blocked on Item 14 merge | pending |
 | Integration tests (Items 6, 7) | Not started | Platform adapter fixtures |
 
 ---
@@ -1061,5 +1061,23 @@ All 11 deferred steps across Items 1–8 implemented:
 
 ---
 
-*ROADMAP Execution Log v2.2 — 2026-03-17 IST (Sprint 6.1 Item 17 documented; YAML fix entry absorbed from main; .pacemap/ directory established)*
+---
+
+### Sprint 6.2 — Item 14: Multi-Release Configuration (2026-03-17)
+
+**Branch:** `feature/multi-release-config`
+**Issue:** #15
+**Tests:** 302 passing, 83% coverage (24 new in `tests/test_multi_release.py`)
+
+| Step | File | Change |
+| ---- | ---- | ------ |
+| 1 | `pace/config.py` | `ReleaseConfig`: added `plan_file: str` and `status: str` fields |
+| 2 | `pace/config.py` | `PaceConfig`: replaced `release: ReleaseConfig \| None` with `releases: list[ReleaseConfig] \| None` |
+| 2 | `pace/config.py` | `PaceConfig.active_release` property: returns active entry respecting `PACE_RELEASE` env-var override; raises on multiple active |
+| 2 | `pace/config.py` | `_load_config_from_path()` extracted from `load_config()` for testability; parses both `releases:` list and legacy `release:` key |
+| 3 | `pace/config_tester.py` | `_validate_releases()`: validates name uniqueness, `sprint_days ≤ release_days`, exactly one `status: active`, valid status values; legacy `release:` key suggests migration |
+| 4 | `pace/orchestrator.py` | `_try_open_staging_pr()`: `cfg.release` → `cfg.active_release` |
+| 6 | `pace/migrations/v3_multi_release.py` | New migration script: rewrites legacy `release:` key to `releases:` list; supports `--dry-run` |
+
+*ROADMAP Execution Log v2.3 — 2026-03-17 IST (Sprint 6.2 Item 14 documented)*
 *Author: Vipul Meehnia*

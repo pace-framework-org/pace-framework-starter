@@ -720,7 +720,8 @@ def _try_open_staging_pr(
 
     try:
         cfg = load_config()
-        if not cfg.release:
+        active = cfg.active_release
+        if not active:
             return  # Release branching not configured — skip
 
         # Resolve the current HEAD branch name
@@ -732,7 +733,7 @@ def _try_open_staging_pr(
             return
         head_branch = result.stdout.strip()
 
-        base_branch = f"release/{cfg.release.name}"
+        base_branch = f"release/{active.name}"
         ci_conclusion = ci_result.get("conclusion", "not run") if ci_result else "not run"
 
         from branching import get_branching_adapter

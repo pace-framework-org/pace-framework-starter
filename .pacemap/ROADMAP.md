@@ -504,7 +504,7 @@ Wire source-document change detection into the preflight and planner workflows:
 
 ### Item 14: Multi-Release Configuration
 
-> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Planned
+> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Merged — PR #TBD (2026-03-17)
 
 **Assessment**
 
