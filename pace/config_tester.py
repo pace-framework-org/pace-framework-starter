@@ -141,7 +141,7 @@ def _validate_release(raw: dict, r: ConfigTestResult) -> None:
     if release is None:
         r.suggest(
             "release section is not configured; PACE v2.0 supports a full "
-            "release/sprint branching model — see ROADMAP.md Item 1"
+            "release/sprint branching model — see .pacemap/ROADMAP.md Item 1"
         )
         return
     if not release.get("name"):
@@ -273,7 +273,7 @@ def _validate_llm_limits(raw: dict, r: ConfigTestResult) -> None:
         r.suggest(
             "llm.limits is not configured; per-agent token limits are recommended. "
             "For FORGE on non-trivial codebases, set forge_input_tokens: 160000 to prevent "
-            "context truncation at iteration 10+. See ROADMAP.md Item 3."
+            "context truncation at iteration 10+. See .pacemap/ROADMAP.md Item 3."
         )
         return
     forge_input = limits.get("forge_input_tokens", 160000)
@@ -336,7 +336,7 @@ def _validate_notifications(raw: dict, r: ConfigTestResult) -> None:
     if not notif and not alerts:
         r.suggest(
             "notifications and alerts are not configured; PACE v2.0 supports Slack/Teams/email "
-            "alerts for hold_opened, story_shipped, cost_exceeded and more — see ROADMAP.md Item 5"
+            "alerts for hold_opened, story_shipped, cost_exceeded and more — see .pacemap/ROADMAP.md Item 5"
         )
         return
 
@@ -495,7 +495,7 @@ def _validate_cron(raw: dict, r: ConfigTestResult) -> None:
     if cron is None:
         r.suggest(
             "cron section is not configured; PACE v2.0 supports centralised cron scheduling "
-            "with concurrency guards — see ROADMAP.md Item 8"
+            "with concurrency guards — see .pacemap/ROADMAP.md Item 8"
         )
         return
     import re

@@ -184,6 +184,9 @@ def generate(apply: bool = False, check: bool = False) -> bool:
 
     apply=True  — write changes to disk
     check=True  — return False (exit 1) if any file is out of sync
+
+    When apply=True and the ROADMAP.md Roadmap Version header has changed,
+    snapshots the previous version via pacemap.snapshot_roadmap_if_version_changed.
     """
     cfg = _load_config()
     cron = cfg.cron
@@ -237,7 +240,39 @@ def generate(apply: bool = False, check: bool = False) -> bool:
         )
         return False
 
+    # Snapshot ROADMAP.md if its Roadmap Version header changed during this run.
+    if apply:
+        _maybe_snapshot_roadmap()
+
     return True
+
+
+def _maybe_snapshot_roadmap() -> None:
+    """Snapshot ROADMAP.md if the Roadmap Version header changed on disk.
+
+    Reads the version from git HEAD vs. the working-tree copy and delegates to
+    pacemap.snapshot_roadmap_if_version_changed.  Non-fatal.
+    """
+    try:
+        roadmap_path = _REPO_ROOT / ".pacemap" / "ROADMAP.md"
+        if not roadmap_path.exists():
+            return
+
+        import subprocess as _sp
+        result = _sp.run(
+            ["git", "show", "HEAD:.pacemap/ROADMAP.md"],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        previous_text = result.stdout if result.returncode == 0 else ""
+        current_text = roadmap_path.read_text(encoding="utf-8")
+
+        sys.path.insert(0, str(Path(__file__).parent))
+        from pacemap import snapshot_roadmap_if_version_changed
+        snapshot_roadmap_if_version_changed(previous_text, current_text)
+    except Exception as exc:
+        print(f"[ci_generator] ROADMAP snapshot check failed (non-fatal): {exc}")
 
 
 if __name__ == "__main__":

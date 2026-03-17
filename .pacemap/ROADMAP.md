@@ -623,7 +623,7 @@ Extend `config_tester.py` to cover multi-release constraints and add an explicit
 
 ### Item 17: `.pacemap` Directory
 
-> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Planned
+> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Merged — PR #TBD (2026-03-17)
 
 **Assessment**
 
