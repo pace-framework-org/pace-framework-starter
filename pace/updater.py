@@ -42,7 +42,10 @@ _UPSTREAM_REPO = os.environ.get(
 _CACHE_TTL_SECONDS = 23 * 3600  # 23 hours
 
 # Tutorial URL referenced in WARNING messages
-_UPGRADE_TUTORIAL = "https://pace-docs.example.com/tutorials/updating-customised-pace"
+_UPGRADE_TUTORIAL = "https://pace-framework.org/tutorials/existing-project/"
+
+# Path to write update status for the reporter
+_UPDATE_STATUS_FILE = _PACE_DIR / "update_status.yaml"
 
 
 def _current_version() -> str:
@@ -228,6 +231,57 @@ def apply_update(new_tag: str) -> bool:
         return False
 
 
+def _write_update_status(new_tag: str, current: str, customizations: list[str]) -> None:
+    """Persist update availability to .pace/update_status.yaml for reporter.py."""
+    _PACE_DIR.mkdir(parents=True, exist_ok=True)
+    import json as _json
+    note = (
+        "Customized files prevent auto-update: " + ", ".join(customizations[:3])
+        + (" ..." if len(customizations) > 3 else "")
+        if customizations
+        else "Auto-update is disabled in config."
+    )
+    data = {
+        "update_available": True,
+        "new_version": new_tag,
+        "current_version": f"v{current}",
+        "customization_note": note,
+    }
+    try:
+        _UPDATE_STATUS_FILE.write_text(_json.dumps(data, indent=2))
+    except OSError as exc:
+        # Non-fatal: failure to persist update status should not block the pipeline.
+        print(f"[PACE] Could not write update status file (non-fatal): {exc}")
+
+
+def _clear_update_status() -> None:
+    """Remove .pace/update_status.yaml when no update is available."""
+    try:
+        _UPDATE_STATUS_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass  # Non-fatal: stale status file will simply be overwritten on next run.
+
+
+def _fire_update_available_event(new_tag: str, current: str, customizations: list[str]) -> None:
+    """Fire the update_available AlertEngine event (best-effort, non-fatal)."""
+    try:
+        from config import load_config
+        from alert_engine import AlertEngine
+        note = (
+            "Customized files prevent auto-update: " + ", ".join(customizations[:3])
+            + (" ..." if len(customizations) > 3 else "")
+            if customizations
+            else "Auto-update is disabled in config."
+        )
+        AlertEngine(load_config()).fire("update_available", {
+            "new_version": new_tag,
+            "current_version": f"v{current}",
+            "customization_note": note,
+        })
+    except Exception:
+        pass  # Non-fatal — alert dispatch must never block the pipeline
+
+
 def check_and_warn(
     auto_update: bool = True,
     suppress_warning: bool = False,
@@ -260,10 +314,14 @@ def check_and_warn(
     if auto_update and not customizations:
         applied = apply_update(new_tag)
         if applied:
+            _clear_update_status()
             print(f"[PACE] Auto-updated to {new_tag}. Continuing pipeline with new version.")
             return
 
-    # Could not auto-update — emit WARNING if not suppressed
+    # Could not auto-update — persist status, fire event, and emit WARNING if not suppressed
+    _write_update_status(new_tag, current, customizations)
+    _fire_update_available_event(new_tag, current, customizations)
+
     if not suppress_warning:
         if customizations:
             files_list = "\n".join(f"    - {f}" for f in customizations[:10])

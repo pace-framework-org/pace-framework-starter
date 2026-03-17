@@ -994,21 +994,38 @@ Deferred steps are isolated fixes to already-delivered items and have no depende
 | Item 7 (Platform Finalization) | #10 | ✅ 2026-03-15 |
 | Item 10 (Plugin System) | #11 | ✅ 2026-03-15 |
 | Item 11 (Training Data Pipeline) | #12 | ✅ 2026-03-15 |
+| Deferred Steps Cleanup (Items 1–8) | #TBD | 🔄 2026-03-16 (PR open) |
 
 ## Pending Work
 
 | Item | Status | Next Action |
 | ---- | ------ | ----------- |
-| Item 1 deferred steps (5–6) | Not started | Staging CI gate + branch-protection checks |
-| Item 2 deferred steps (3, 5) | Not started | PRIME plan_mode, SCRIBE planning report |
-| Item 3 deferred step (6) | Not started | Token limit retry loop in agent call sites |
-| Item 4 deferred step (7) | Not started | CONDUIT update summary in daily report |
-| Item 4 tutorial URL | Placeholder | Real `pace-docs` tutorial page needed |
-| Item 8 deferred step (5) | Not started | `config_tester.py` ↔ `ci_generator.py` cross-wire |
-| Item 5 `update_available` event | Not started | Wire into `updater.py` |
+| Phase 6 (Items 12–18) | Blocked | Merge deferred-steps-cleanup PR first |
 | Integration tests (Items 6, 7) | Not started | Platform adapter fixtures |
 
 ---
 
-*ROADMAP Execution Log v1.9 — 2026-03-16 IST (Phase 4 body added; post-Phase4 stability fixes documented; stale sections removed; Item 9 PR corrected)*
+### Deferred Steps Cleanup — Sprint Entry (2026-03-16)
+
+**Branch:** `feature/deferred-steps-cleanup`
+**Issue:** #20
+**Tests:** 257 passing (34 new in `tests/test_deferred_steps.py`)
+
+All 11 deferred steps across Items 1–8 implemented:
+
+| Step | File | Change |
+| ---- | ---- | ------ |
+| Item 1 step 5 | `pace/orchestrator.py` | `_try_open_staging_pr()` — open sprint→release PR after CONDUIT SHIP + passing CI |
+| Item 1 step 6 | `pace/preflight.py` | `_check_branch_protection()` — non-fatal GitHub API branch protection check |
+| Item 2 step 3 | `pace/agents/prime.py` | `plan_diff` param injected into PRIME user message for PACE_REPLAN=true |
+| Item 2 step 5 | `pace/agents/scribe.py` | `_write_scribe_report()` — emit `.pace/scribe_report.yaml` after SCRIBE completes |
+| Item 3 step 6 | `pace/llm/anthropic_adapter.py` | Token limit retry: catch `BadRequestError`, compact to 60%, retry once |
+| Item 4 deferred | `pace/updater.py` | Fix docs URL; `_write_update_status()` / `_clear_update_status()`; `_fire_update_available_event()` |
+| Item 5 deferred | `pace/updater.py` | Wire `update_available` AlertEngine event into `check_and_warn()` |
+| Item 4 step 7 | `pace/reporter.py` | `_load_update_status()` + "PACE Update Available" section in `write_job_summary()` |
+| Item 8 step 5 | `pace/config_tester.py` | Suggest `ci_generator.py --check` in `_validate_cron()` when no cron errors |
+
+---
+
+*ROADMAP Execution Log v2.0 — 2026-03-16 IST (Deferred Steps Cleanup sprint documented; Phase 6 unblocked pending PR merge)*
 *Author: Vipul Meehnia*

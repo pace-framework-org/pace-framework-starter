@@ -284,6 +284,29 @@ def _dispatch(name: str, inputs: dict, docs_root) -> str:
     return f"ERROR: Unknown tool: {name}"
 
 
+def _write_scribe_report(docs_written: set[str], files_read: list[str], iterations: int) -> None:
+    """Write .pace/scribe_report.yaml after SCRIBE completes.
+
+    Records context documents generated, source files read, and tool-loop
+    iteration count (budget proxy). Non-fatal on write failure.
+    """
+    import yaml as _yaml
+    report = {
+        "documents_written": sorted(docs_written),
+        "source_files_read": files_read,
+        "tool_iterations": iterations,
+        "missing_docs": sorted(ALLOWED_DOCS - docs_written),
+    }
+    report_path = REPO_ROOT / ".pace" / "scribe_report.yaml"
+    try:
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(_yaml.dump(report, default_flow_style=False, allow_unicode=True))
+        print(f"[SCRIBE] Planning report written ({len(files_read)} source files read, "
+              f"{iterations} iterations, {len(docs_written)}/4 docs written).")
+    except Exception as exc:
+        print(f"[SCRIBE] Could not write planning report (non-fatal): {exc}")
+
+
 def run_scribe() -> None:
     """Run SCRIBE to generate all 4 context documents. Idempotent — safe to re-run."""
     cfg = load_config()
@@ -304,9 +327,12 @@ def run_scribe() -> None:
     ]
 
     docs_written: set[str] = set()
+    files_read: list[str] = []
     max_iterations = 30
+    iteration_count = 0
 
     for _ in range(max_iterations):
+        iteration_count += 1
         response = adapter.chat(
             system=system_prompt,
             messages=messages,
@@ -322,6 +348,8 @@ def run_scribe() -> None:
         tool_results = []
         for call in response.tool_calls:
             result = _dispatch(call.name, call.input, docs_root)
+            if call.name == "read_file":
+                files_read.append(call.input.get("path", ""))
             if call.name == "write_doc" and result.startswith("OK"):
                 docs_written.add(call.input.get("name", ""))
                 print(f"[SCRIBE] Written: {call.input.get('name')}")
@@ -339,6 +367,8 @@ def run_scribe() -> None:
             break
 
         messages.append({"role": "user", "content": tool_results})
+
+    _write_scribe_report(docs_written, files_read, iteration_count)
 
     missing = ALLOWED_DOCS - docs_written
     if missing:

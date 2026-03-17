@@ -24,6 +24,19 @@ import spend_tracker
 from llm.base import ChatResponse, LLMAdapter, ToolCall
 
 
+def _compact_user_message(user: str) -> str:
+    """Truncate a user message to ~60 % of its length with a truncation notice.
+
+    Used as a fallback when the full prompt exceeds the model's context window.
+    """
+    cutoff = max(200, int(len(user) * 0.60))
+    return (
+        user[:cutoff]
+        + "\n\n[Note: Input was truncated to fit the context window. "
+        "Focus on the core requirements above and produce a complete response.]"
+    )
+
+
 class AnthropicAdapter(LLMAdapter):
     def __init__(self, model: str, api_key: str | None = None) -> None:
         self._model = model
@@ -34,14 +47,38 @@ class AnthropicAdapter(LLMAdapter):
     # ------------------------------------------------------------------
 
     def complete(self, system: str, user: str, max_tokens: int = 4096) -> str:
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        spend_tracker.record(response.model, response.usage.input_tokens, response.usage.output_tokens)
-        return response.content[0].text
+        """Single-turn completion with one retry on context-length errors.
+
+        Item 3 deferred step 6: when the Anthropic API rejects the request
+        because the prompt exceeds the context window, compact the user
+        message to ~60 % of its original length and retry once.
+        """
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+            spend_tracker.record(response.model, response.usage.input_tokens, response.usage.output_tokens)
+            return response.content[0].text
+        except anthropic.BadRequestError as exc:
+            err_str = str(exc).lower()
+            if "prompt is too long" in err_str or "context_length" in err_str or "too many tokens" in err_str:
+                compact_user = _compact_user_message(user)
+                print(
+                    f"[PACE][LLM] Token limit hit — retrying with compacted input "
+                    f"({len(user)} → {len(compact_user)} chars)"
+                )
+                response = self._client.messages.create(
+                    model=self._model,
+                    max_tokens=max_tokens,
+                    system=system,
+                    messages=[{"role": "user", "content": compact_user}],
+                )
+                spend_tracker.record(response.model, response.usage.input_tokens, response.usage.output_tokens)
+                return response.content[0].text
+            raise
 
     # ------------------------------------------------------------------
     # Agentic chat (one step in the tool loop)

@@ -495,6 +495,14 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
                 print(f"[PACE] Day {day}: Clearance day FAILED — {len(remaining)} advisory item(s) still open.")
                 return False, "Clearance day: advisory items still open after all agents ran"
 
+        # Item 1 step 5: open staging PR (sprint → release) after CONDUIT SHIP + passing CI
+        _try_open_staging_pr(
+            day,
+            story_card.get("story", ""),
+            commit_sha,
+            ci_result,
+        )
+
         # All checks passed — write cycle cost artifact and SHIP
         cycle_cost_usd = round(spend_tracker.total_usd() - _cycle_cost_before, 4)
         cycle_file = day_dir / "cycle.md"
@@ -690,6 +698,58 @@ def main() -> None:
     except Exception as exc:
         print(f"[PACE] Day {day}: Tracker SHIP updates failed (non-fatal): {exc}")
     sys.exit(0)
+
+
+def _try_open_staging_pr(
+    day: int,
+    story: str,
+    commit_sha: str,
+    ci_result: dict | None,
+) -> None:
+    """Open a PR from the current sprint branch → release branch after CONDUIT SHIP.
+
+    Only runs when release branching is configured and CI passed (or was not run).
+    Non-fatal — a failure here must never block the SHIP outcome.
+
+    Item 1 deferred step 5: CONDUIT staging CI gate → release PR flow.
+    """
+    if not commit_sha:
+        return
+    if ci_result and ci_result.get("conclusion") not in ("success", "no_runs"):
+        return  # Only open PR when CI passed or was not configured
+
+    try:
+        cfg = load_config()
+        if not cfg.release:
+            return  # Release branching not configured — skip
+
+        # Resolve the current HEAD branch name
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, cwd=str(REPO_ROOT), timeout=10,
+        )
+        if result.returncode != 0:
+            return
+        head_branch = result.stdout.strip()
+
+        base_branch = f"release/{cfg.release.name}"
+        ci_conclusion = ci_result.get("conclusion", "not run") if ci_result else "not run"
+
+        from branching import get_branching_adapter
+        get_branching_adapter().create_pull_request(
+            head=head_branch,
+            base=base_branch,
+            title=f"[PACE Day {day}] {story[:60]}",
+            body=(
+                f"**Story:** {story}\n\n"
+                f"**CI:** {ci_conclusion}\n\n"
+                f"*Auto-opened by CONDUIT after SHIP — Day {day}.*\n"
+                f"Review and merge to incorporate this story into `{base_branch}`."
+            ),
+            labels=["pace-story", f"pace-day-{day}"],
+        )
+    except Exception as exc:
+        print(f"[PACE] Day {day}: staging PR creation skipped (non-fatal): {exc}")
 
 
 def _load_story(day_dir: Path) -> dict | None:

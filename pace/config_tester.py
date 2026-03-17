@@ -500,6 +500,7 @@ def _validate_cron(raw: dict, r: ConfigTestResult) -> None:
         return
     import re
     cron_re = re.compile(r"^(\S+\s+){4}\S+$")
+    has_cron_errors = False
     for key in ("pace_pipeline", "planner_pipeline", "update_check"):
         val = cron.get(key)
         if val and not cron_re.match(str(val).strip()):
@@ -507,6 +508,12 @@ def _validate_cron(raw: dict, r: ConfigTestResult) -> None:
                 f"cron.{key} '{val}' does not look like a valid cron expression "
                 "(expected 5 space-separated fields, e.g. '0 9 * * 1-5')"
             )
+            has_cron_errors = True
+    if not has_cron_errors:
+        r.suggest(
+            "cron settings are configured — run `python pace/ci_generator.py --check` to verify "
+            "that CI workflow files are in sync with the schedule in pace.config.yaml"
+        )
 
 
 def _validate_reporter(raw: dict, r: ConfigTestResult) -> None:
