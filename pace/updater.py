@@ -249,8 +249,9 @@ def _write_update_status(new_tag: str, current: str, customizations: list[str]) 
     }
     try:
         _UPDATE_STATUS_FILE.write_text(_json.dumps(data, indent=2))
-    except OSError:
-        pass
+    except OSError as exc:
+        # Non-fatal: failure to persist update status should not block the pipeline.
+        print(f"[PACE] Could not write update status file (non-fatal): {exc}")
 
 
 def _clear_update_status() -> None:
@@ -258,7 +259,7 @@ def _clear_update_status() -> None:
     try:
         _UPDATE_STATUS_FILE.unlink(missing_ok=True)
     except OSError:
-        pass
+        pass  # Non-fatal: stale status file will simply be overwritten on next run.
 
 
 def _fire_update_available_event(new_tag: str, current: str, customizations: list[str]) -> None:
