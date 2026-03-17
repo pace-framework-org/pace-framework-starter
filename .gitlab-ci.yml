@@ -47,7 +47,7 @@ pace:
     PACE_PAUSED: ${PACE_PAUSED:-false}
   script:
     # Validate configuration before running
-    - python pace/config_tester.py
+    - python pace/config_tester.py --strict
 
     # Daily budget guard (skip on web/manual trigger)
     - |

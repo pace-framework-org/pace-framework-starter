@@ -696,6 +696,69 @@ def _validate_context_manifest(r: ConfigTestResult) -> None:
 
 
 _PLAN_FILE = Path(__file__).parent.parent / "plan.yaml"
+_REPO_ROOT = Path(__file__).parent.parent
+
+
+def _validate_plan_files(
+    raw: dict, r: ConfigTestResult, release_filter: str | None = None
+) -> None:
+    """For each active/completed release with a plan_file, verify it exists and is valid.
+
+    Checks:
+    - plan_file path is set (warns if missing for active/completed releases)
+    - file exists on disk (warns if not)
+    - file parses as valid YAML (hard error if not)
+    - file contains 'release' and ('stories' or 'days') keys (warns if missing)
+
+    If release_filter is given, only the named release is checked.
+    """
+    releases_raw = raw.get("releases")
+    if not releases_raw or not isinstance(releases_raw, list):
+        return
+
+    for i, entry in enumerate(releases_raw):
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name", f"releases[{i}]")
+        if release_filter and name != release_filter:
+            continue
+
+        status = entry.get("status", "active")
+        if status not in ("active", "completed"):
+            continue
+
+        plan_file_path = entry.get("plan_file", "")
+        if not plan_file_path:
+            r.warn(
+                f"releases '{name}' (status: {status}) has no plan_file configured — "
+                "set plan_file to the path of this release's plan.yaml."
+            )
+            continue
+
+        plan_path = _REPO_ROOT / plan_file_path
+        if not plan_path.exists():
+            r.warn(
+                f"releases '{name}' plan_file '{plan_file_path}' does not exist — "
+                "create the file or update the path."
+            )
+            continue
+
+        try:
+            plan_data = yaml.safe_load(plan_path.read_text()) or {}
+        except yaml.YAMLError as exc:
+            r.error(f"releases '{name}' plan_file '{plan_file_path}' YAML parse error: {exc}")
+            continue
+
+        if "release" not in plan_data:
+            r.warn(
+                f"releases '{name}' plan_file '{plan_file_path}' is missing 'release' field — "
+                "run `python pace/migrations/v3_plan_naming.py --plan {plan_file_path}`"
+            )
+        if "stories" not in plan_data and "days" not in plan_data:
+            r.warn(
+                f"releases '{name}' plan_file '{plan_file_path}' has neither "
+                "'stories' nor 'days' key — check the file is a valid PACE plan."
+            )
 
 
 def _validate_plan(r: ConfigTestResult) -> None:
@@ -730,8 +793,15 @@ def _validate_plan(r: ConfigTestResult) -> None:
 # Main runner
 # ---------------------------------------------------------------------------
 
-def run_config_test(config_file: Path = CONFIG_FILE) -> ConfigTestResult:
+def run_config_test(
+    config_file: Path = CONFIG_FILE,
+    release_filter: str | None = None,
+) -> ConfigTestResult:
     """Load and validate pace.config.yaml. Returns a ConfigTestResult.
+
+    Args:
+        config_file: Path to pace.config.yaml.
+        release_filter: When set, only validate plan files for this release name.
 
     Safe to call multiple times (creates a fresh result each time).
     """
@@ -766,6 +836,7 @@ def run_config_test(config_file: Path = CONFIG_FILE) -> ConfigTestResult:
     _validate_training(raw, r)
     _validate_context_manifest(r)
     _validate_plan(r)
+    _validate_plan_files(raw, r, release_filter=release_filter)
 
     return r
 
@@ -819,8 +890,22 @@ if __name__ == "__main__":
         metavar="PATH",
         help="Path to pace.config.yaml (default: pace/pace.config.yaml)",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Treat all warnings as errors (exit code 2); suitable for CI preflight gates",
+    )
+    parser.add_argument(
+        "--release",
+        metavar="NAME",
+        default=None,
+        help="Validate only the named release's plan file (e.g. --release v2.0)",
+    )
     args = parser.parse_args()
 
-    result = run_config_test(Path(args.config))
+    result = run_config_test(Path(args.config), release_filter=args.release)
+    if args.strict and result.warnings:
+        result.errors.extend(result.warnings)
+        result.warnings.clear()
     _print_result(result, as_json=args.json)
     sys.exit(result.exit_code)

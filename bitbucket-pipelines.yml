@@ -30,7 +30,7 @@ definitions:
           - git config user.name "PACE Orchestrator"
           - git config user.email "pace@bitbucket.org"
           - pip install -r pace/requirements.txt --quiet
-          - python pace/config_tester.py
+          - python pace/config_tester.py --strict
 
     - step: &pace-cycle
         name: PACE Daily Cycle
