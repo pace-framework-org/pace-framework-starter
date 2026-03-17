@@ -27,7 +27,7 @@
 | 2.3 | 2026-03-17 | Sprint 6.3 start: Item 13 (Context Auto-Refresh) implementation complete; `_archive_context`, `_check_context_freshness`, `force_refresh_context` in preflight.py; 18 tests added |
 | 2.4 | 2026-03-17 | Item 13 PR #27 opened, merged, issue #17 closed |
 | 2.5 | 2026-03-17 | Item 15 (plan.yaml Versioning & Story Naming) delivered: `PLAN_SCHEMA`, `_iter_stories`, `_get_replan_boundary`, `_backup_plan`, `v3_plan_naming.py` migration, orchestrator `get_day_plan` update, `_validate_plan` in config_tester; 29 tests; PR #28 merged, issue #18 closed |
-| 2.6 | 2026-03-17 | Item 16 (Pre-run Config Validation Extended) delivered: `_validate_plan_files`, `--strict`/`--release` CLI flags, CI file updates (GitHub Actions, GitLab CI, Jenkinsfile, Bitbucket Pipelines); 14 tests; PR #29 opened, issue #19 closed |
+| 2.6 | 2026-03-17 | Item 16 (Pre-run Config Validation Extended) delivered: `_validate_plan_files`, `--strict`/`--release` CLI flags, CI file updates (GitHub Actions, GitLab CI, Jenkinsfile, Bitbucket Pipelines); 14 tests; PR #30 merged, issue #19 closed |
 | 2.7 | 2026-03-17 | Execution log updated to v2.7; Pending Work table cleared; Sprint 6.3 fully complete |
 
 ---
