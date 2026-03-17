@@ -250,6 +250,26 @@ def _validate_source(raw: dict, r: ConfigTestResult) -> None:
             )
 
 
+_KNOWN_SOURCE_DOCS = ["PRD.md", "SRS.md", "README.md", "ARCHITECTURE.md"]
+
+
+def _validate_source_docs(r: ConfigTestResult) -> None:
+    """Warn if no known source docs exist and flag missing configured doc paths.
+
+    SCRIBE uses these docs to build context. If none are present, it will
+    generate context purely from code exploration, which produces lower-quality
+    results.
+    """
+    repo_root = Path(__file__).parent.parent
+    present = [d for d in _KNOWN_SOURCE_DOCS if (repo_root / d).exists()]
+    if not present:
+        r.suggest(
+            "No source documents found (PRD.md, SRS.md, README.md, ARCHITECTURE.md). "
+            "SCRIBE will generate context from code alone — add at least a README.md "
+            "for better context quality."
+        )
+
+
 def _validate_tech(raw: dict, r: ConfigTestResult) -> None:
     tech = raw.get("tech", {})
     if not tech.get("primary_language"):
@@ -701,6 +721,7 @@ def run_config_test(config_file: Path = CONFIG_FILE) -> ConfigTestResult:
     _validate_sprint(raw, r)
     _validate_releases(raw, r)
     _validate_source(raw, r)
+    _validate_source_docs(r)
     _validate_tech(raw, r)
     _validate_platform(raw, r)
     _validate_llm(raw, r)

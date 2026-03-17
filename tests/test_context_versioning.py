@@ -128,11 +128,12 @@ def test_archive_context_archives_files_on_release_change(tmp_path):
          patch("config.load_config", return_value=mock_cfg):
         preflight._archive_context_for_release_change()
 
-    assert (context_dir / "product.v1.0.md").exists()
-    assert (context_dir / "engineering.v1.0.md").exists()
+    names = [f.name for f in context_dir.iterdir()]
+    assert any(n.startswith("product.v1.0.") and n.endswith(".md") for n in names)
+    assert any(n.startswith("engineering.v1.0.") and n.endswith(".md") for n in names)
     assert not (context_dir / "product.md").exists()
     assert not (context_dir / "engineering.md").exists()
-    assert (context_dir / "context.manifest.v1.0.yaml").exists()
+    assert any(n.startswith("context.manifest.v1.0.") and n.endswith(".yaml") for n in names)
 
 
 def test_archive_context_noop_same_release(tmp_path):

@@ -95,6 +95,98 @@ def _check_branch_protection() -> None:
         pass  # Non-fatal — branch protection check must never block the pipeline
 
 
+def _archive_context(release_name: str, reason: str = "") -> None:
+    """Move existing context docs to <stem>.<release>.<iso-date>.md.
+
+    Used by both cross-release archival (Item 12) and same-release refresh
+    (Item 13). The ISO-date suffix distinguishes multiple same-release refreshes
+    (e.g. product.v2.0.2026-03-16.md).  Non-fatal.
+    """
+    import datetime
+    iso_date = datetime.date.today().isoformat()
+    archived = []
+    try:
+        for doc in REQUIRED_DOCS:
+            src = CONTEXT_DIR / doc
+            if src.exists():
+                stem = doc.replace(".md", "")
+                dest = CONTEXT_DIR / f"{stem}.{release_name}.{iso_date}.md"
+                # If dest already exists (two refreshes same day), append a counter
+                counter = 1
+                while dest.exists():
+                    dest = CONTEXT_DIR / f"{stem}.{release_name}.{iso_date}.{counter}.md"
+                    counter += 1
+                src.rename(dest)
+                archived.append(dest.name)
+        manifest_src = CONTEXT_DIR / "context.manifest.yaml"
+        if manifest_src.exists():
+            manifest_dest = CONTEXT_DIR / f"context.manifest.{release_name}.{iso_date}.yaml"
+            counter = 1
+            while manifest_dest.exists():
+                manifest_dest = CONTEXT_DIR / f"context.manifest.{release_name}.{iso_date}.{counter}.yaml"
+                counter += 1
+            manifest_src.rename(manifest_dest)
+            archived.append(manifest_dest.name)
+        if archived:
+            tag = f" ({reason})" if reason else ""
+            print(f"[PACE] Archived {len(archived)} context files{tag}: {archived}")
+    except Exception as exc:
+        print(f"[PACE] Warning: context archival error (non-fatal): {exc}")
+
+
+def _check_context_freshness() -> list[str]:
+    """Compare current source-doc hashes against context.manifest.yaml.
+
+    Returns list of changed source-doc filenames. Triggers archival + SCRIBE
+    regeneration when changes are detected. Non-fatal — returns [] on any error.
+    """
+    try:
+        import yaml as _yaml
+        from agents.scribe import _sha256
+        from config import load_config
+
+        manifest_path = CONTEXT_DIR / "context.manifest.yaml"
+        if not manifest_path.exists():
+            return []  # No manifest yet — freshness check not applicable
+
+        raw = _yaml.safe_load(manifest_path.read_text()) or {}
+        stored_hashes: dict[str, str] = raw.get("source_hashes", {})
+        if not stored_hashes:
+            return []  # Nothing to compare
+
+        changed = []
+        for filename, stored_hash in stored_hashes.items():
+            current_path = REPO_ROOT / filename
+            if current_path.exists():
+                current_hash = _sha256(current_path)
+                if current_hash and current_hash != stored_hash:
+                    changed.append(filename)
+
+        if not changed:
+            return []
+
+        print(
+            f"[PACE] [Context Refreshed] Source docs changed since last run: {changed}. "
+            "Archiving stale context and regenerating..."
+        )
+
+        cfg = load_config()
+        release_name = cfg.active_release.name if cfg.active_release else "unknown"
+        _archive_context(release_name, reason="source doc changed")
+
+        from agents.scribe import run_scribe
+        try:
+            run_scribe()
+        except Exception as exc:
+            print(f"[PACE] Warning: SCRIBE regeneration failed after source-doc change: {exc}")
+
+        return changed
+
+    except Exception as exc:
+        print(f"[PACE] Warning: context freshness check skipped: {exc}")
+        return []
+
+
 def _archive_context_for_release_change() -> None:
     """Archive existing context files when the active release has changed.
 
@@ -125,21 +217,7 @@ def _archive_context_for_release_change() -> None:
             f"[PACE] Release changed from '{manifest_release}' → '{active.name}'. "
             "Archiving context files for prior release..."
         )
-        archived = []
-        for doc in REQUIRED_DOCS:
-            src = CONTEXT_DIR / doc
-            if src.exists():
-                stem = doc.replace(".md", "")
-                dest = CONTEXT_DIR / f"{stem}.{manifest_release}.md"
-                src.rename(dest)
-                archived.append(dest.name)
-
-        # Also archive the old manifest itself
-        manifest_archive = CONTEXT_DIR / f"context.manifest.{manifest_release}.yaml"
-        manifest_path.rename(manifest_archive)
-        archived.append(manifest_archive.name)
-
-        print(f"[PACE] Archived {len(archived)} context files: {archived}")
+        _archive_context(manifest_release, reason=f"release changed to {active.name}")
 
     except Exception as exc:
         # Non-fatal — archival failure must never block the pipeline
@@ -225,6 +303,9 @@ def run_preflight(day: int) -> None:
     # Context versioning (Item 12) — archive prior-release docs before SCRIBE runs
     _archive_context_for_release_change()
 
+    # Context auto-refresh (Item 13) — regenerate if source docs have changed
+    _check_context_freshness()
+
     missing = _missing_docs()
 
     if not missing:
@@ -264,3 +345,44 @@ def run_preflight(day: int) -> None:
         print(f"[PACE] Warning: could not commit context docs: {result.stderr.strip()}")
 
     print(f"[PACE] Preflight: all context documents ready.")
+
+
+def force_refresh_context() -> None:
+    """Force unconditional context regeneration, bypassing hash checks.
+
+    Archives current docs (with active release name + today's date) then
+    re-runs SCRIBE from scratch. Invoked by ``--refresh-context`` CLI flag.
+    """
+    try:
+        from config import load_config
+        cfg = load_config()
+        release_name = cfg.active_release.name if cfg.active_release else "unknown"
+    except Exception:
+        release_name = "unknown"
+
+    print("[PACE] --refresh-context: archiving existing context docs and regenerating...")
+    _archive_context(release_name, reason="forced refresh")
+
+    from agents.scribe import run_scribe
+    try:
+        run_scribe()
+        print("[PACE] --refresh-context: context regeneration complete.")
+    except Exception as exc:
+        raise RuntimeError(f"SCRIBE regeneration failed: {exc}") from exc
+
+
+if __name__ == "__main__":
+    import argparse as _argparse
+
+    _parser = _argparse.ArgumentParser(description="PACE Preflight")
+    _parser.add_argument(
+        "--refresh-context",
+        action="store_true",
+        help="Force unconditional context regeneration (bypasses hash check)",
+    )
+    _args = _parser.parse_args()
+
+    if _args.refresh_context:
+        force_refresh_context()
+    else:
+        _parser.print_help()
