@@ -999,12 +999,13 @@ Deferred steps are isolated fixes to already-delivered items and have no depende
 | Item 17 (.pacemap Directory) | #TBD | 🔄 2026-03-17 (PR open) |
 | Item 18 (CHANGELOG.md) | #TBD | 🔄 2026-03-17 (PR open, conflicts) |
 | Item 14 (Multi-Release Config) | #15 | 🔄 2026-03-17 (PR open) |
+| Item 12 (Context Versioning) | #16 | 🔄 2026-03-17 (PR open) |
 
 ## Pending Work
 
 | Item | Status | Next Action |
 | ---- | ------ | ----------- |
-| Sprint 6.3 — Items 12, 13, 15, 16 | Blocked on Item 14 merge | pending |
+| Sprint 6.3 — Items 13, 15, 16 | Blocked on Items 12 + 14 | pending |
 | Integration tests (Items 6, 7) | Not started | Platform adapter fixtures |
 
 ---
@@ -1079,5 +1080,21 @@ All 11 deferred steps across Items 1–8 implemented:
 | 4 | `pace/orchestrator.py` | `_try_open_staging_pr()`: `cfg.release` → `cfg.active_release` |
 | 6 | `pace/migrations/v3_multi_release.py` | New migration script: rewrites legacy `release:` key to `releases:` list; supports `--dry-run` |
 
-*ROADMAP Execution Log v2.3 — 2026-03-17 IST (Sprint 6.2 Item 14 documented)*
+---
+
+### Sprint 6.3 — Item 12: Release-Scoped Context Directory Versioning (2026-03-17)
+
+**Branch:** `feature/context-versioning`
+**Issue:** #16
+**Tests:** 321 passing, 83% coverage (19 new in `tests/test_context_versioning.py`)
+
+| Step | File | Change |
+| ---- | ---- | ------ |
+| 1 | `pace/schemas.py` | `CONTEXT_MANIFEST_SCHEMA` — JSON schema for `context.manifest.yaml` |
+| 2 | `pace/preflight.py` | `_archive_context_for_release_change()` — reads manifest, archives prior-release docs to `<stem>.<release>.md` when release changes; called from `run_preflight()` |
+| 3 | `pace/agents/scribe.py` | `_sha256()` helper; `_write_context_manifest()` — writes `.pace/context/context.manifest.yaml` with release, timestamp, source-doc hashes, and files list; called from `run_scribe()` |
+| 4 | `pace/migrations/v3_context_versioning.py` | Migration: archives unversioned docs as `*.pre-v3.md`; supports `--dry-run` |
+| 5 | `pace/config_tester.py` | `_validate_context_manifest()` — warns if context docs exist with no manifest or have untracked files |
+
+*ROADMAP Execution Log v2.4 — 2026-03-17 IST (Sprint 6.3 Item 12 documented)*
 *Author: Vipul Meehnia*

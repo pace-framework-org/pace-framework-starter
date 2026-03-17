@@ -95,6 +95,57 @@ def _check_branch_protection() -> None:
         pass  # Non-fatal — branch protection check must never block the pipeline
 
 
+def _archive_context_for_release_change() -> None:
+    """Archive existing context files when the active release has changed.
+
+    Reads .pace/context/context.manifest.yaml; if the release recorded there
+    differs from the current active release, renames each context file to
+    <name>.<old-release>.md and deletes the original so SCRIBE generates fresh
+    copies for the new release. Non-fatal on any error.
+    """
+    try:
+        import yaml as _yaml
+        from config import load_config
+
+        cfg = load_config()
+        active = cfg.active_release
+        if not active:
+            return  # No release configured — versioning not applicable
+
+        manifest_path = CONTEXT_DIR / "context.manifest.yaml"
+        if not manifest_path.exists():
+            return  # No manifest yet — first run, nothing to archive
+
+        raw = _yaml.safe_load(manifest_path.read_text()) or {}
+        manifest_release = raw.get("release", "")
+        if not manifest_release or manifest_release == active.name:
+            return  # Same release — no archival needed
+
+        print(
+            f"[PACE] Release changed from '{manifest_release}' → '{active.name}'. "
+            "Archiving context files for prior release..."
+        )
+        archived = []
+        for doc in REQUIRED_DOCS:
+            src = CONTEXT_DIR / doc
+            if src.exists():
+                stem = doc.replace(".md", "")
+                dest = CONTEXT_DIR / f"{stem}.{manifest_release}.md"
+                src.rename(dest)
+                archived.append(dest.name)
+
+        # Also archive the old manifest itself
+        manifest_archive = CONTEXT_DIR / f"context.manifest.{manifest_release}.yaml"
+        manifest_path.rename(manifest_archive)
+        archived.append(manifest_archive.name)
+
+        print(f"[PACE] Archived {len(archived)} context files: {archived}")
+
+    except Exception as exc:
+        # Non-fatal — archival failure must never block the pipeline
+        print(f"[PACE] Warning: context archival skipped: {exc}")
+
+
 def acquire_pipeline_lock() -> None:
     """Write .pace/pipeline.lock with current PID and timestamp.
 
@@ -170,6 +221,9 @@ def run_preflight(day: int) -> None:
 
     # Branch protection check (Item 1 deferred step 6) — non-fatal advisory
     _check_branch_protection()
+
+    # Context versioning (Item 12) — archive prior-release docs before SCRIBE runs
+    _archive_context_for_release_change()
 
     missing = _missing_docs()
 

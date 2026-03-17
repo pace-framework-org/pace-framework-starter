@@ -284,6 +284,48 @@ def _dispatch(name: str, inputs: dict, docs_root) -> str:
     return f"ERROR: Unknown tool: {name}"
 
 
+def _sha256(path: Path) -> str:
+    """Return the SHA-256 hex digest of *path*, or empty string if unreadable."""
+    import hashlib
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except Exception:
+        return ""
+
+
+def _write_context_manifest(release_name: str, docs_written: set[str]) -> None:
+    """Write .pace/context/context.manifest.yaml after SCRIBE generates docs.
+
+    Records the active release, generation timestamp, SHA-256 hashes of known
+    source docs, and the list of context files written. Non-fatal on failure.
+    """
+    import datetime
+    import yaml as _yaml
+
+    # Hash well-known source docs if present
+    source_candidates = ["PRD.md", "SRS.md", "README.md", "ARCHITECTURE.md"]
+    source_hashes: dict[str, str] = {}
+    for candidate in source_candidates:
+        p = REPO_ROOT / candidate
+        if p.exists():
+            source_hashes[candidate] = _sha256(p)
+
+    manifest = {
+        "release": release_name,
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source_hashes": source_hashes,
+        "files": sorted(docs_written),
+    }
+
+    manifest_path = CONTEXT_DIR / "context.manifest.yaml"
+    try:
+        CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(_yaml.dump(manifest, default_flow_style=False, allow_unicode=True))
+        print(f"[SCRIBE] context.manifest.yaml written (release: {release_name}).")
+    except Exception as exc:
+        print(f"[SCRIBE] Could not write context manifest (non-fatal): {exc}")
+
+
 def _write_scribe_report(docs_written: set[str], files_read: list[str], iterations: int) -> None:
     """Write .pace/scribe_report.yaml after SCRIBE completes.
 
@@ -369,6 +411,10 @@ def run_scribe() -> None:
         messages.append({"role": "user", "content": tool_results})
 
     _write_scribe_report(docs_written, files_read, iteration_count)
+
+    # Item 12: write context.manifest.yaml with release + source hashes
+    release_name = (cfg.active_release.name if cfg.active_release else "")
+    _write_context_manifest(release_name, docs_written)
 
     missing = ALLOWED_DOCS - docs_written
     if missing:
