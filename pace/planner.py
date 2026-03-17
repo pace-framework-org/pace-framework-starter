@@ -23,6 +23,7 @@ Usage:
 import argparse
 import os
 import re
+import shutil
 import sys
 import yaml
 from datetime import datetime, timezone
@@ -30,6 +31,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
 PACE_DIR = REPO_ROOT / ".pace"
+PLAN_FILE = REPO_ROOT / "plan.yaml"
 
 
 def _estimate_day_cost(target: str, day: int, model: str) -> dict:
@@ -96,7 +98,51 @@ def _load_existing_actuals() -> dict[int, float]:
     return actuals
 
 
-def run_planner(plan: dict, model: str, replan: bool = False) -> dict:
+def _iter_stories(plan: dict):
+    """Yield (day_num, entry) for both stories and legacy days format."""
+    if "stories" in plan:
+        for s in plan["stories"]:
+            sid = s.get("id", "")
+            try:
+                day_num = int(sid.split("-")[1])
+            except (IndexError, ValueError):
+                continue
+            yield day_num, s
+    else:
+        for d in plan.get("days", []):
+            yield d["day"], d
+
+
+def _get_replan_boundary(stories: list[dict]) -> int:
+    """Return the index of the last shipped story, or -1 if none are shipped."""
+    boundary = -1
+    for i, s in enumerate(stories):
+        if s.get("status") == "shipped":
+            boundary = i
+    return boundary
+
+
+def _backup_plan(plan_file: Path, release_name: str, retention_days: int = 30) -> Path | None:
+    """Copy plan_file to .pace/releases/<release>/plan.yaml.bak.<iso-datetime>.
+
+    Prunes backups older than retention_days. Returns the backup path, or None
+    if plan_file does not exist.
+    """
+    if not plan_file.exists():
+        return None
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup_dir = PACE_DIR / "releases" / release_name
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_path = backup_dir / f"plan.yaml.bak.{ts}"
+    shutil.copy2(plan_file, backup_path)
+    cutoff = datetime.now(timezone.utc).timestamp() - retention_days * 86400
+    for old in backup_dir.glob("plan.yaml.bak.*"):
+        if old != backup_path and old.stat().st_mtime < cutoff:
+            old.unlink()
+    return backup_path
+
+
+def run_planner(plan: dict, model: str, replan: bool = False, plan_file: Path | None = None) -> dict:
     """Estimate cost for every day in the sprint plan.
 
     Writes .pace/day-0/planner.md and returns the planner report dict.
@@ -128,10 +174,27 @@ def run_planner(plan: dict, model: str, replan: bool = False) -> dict:
     except (ValueError, AttributeError):
         new_version = "1.0.1"
 
-    days = plan.get("days", [])
+    # Detect plan format and normalise to (day_num, entry) pairs
+    using_stories = "stories" in plan
+    story_entries = list(_iter_stories(plan))
 
-    # Load existing actuals when re-planning so completed days are not overwritten
-    existing_actuals: dict[int, float] = _load_existing_actuals() if replan else {}
+    # Backup plan.yaml before any re-plan write (Item 15)
+    if replan and plan_file is not None:
+        release_name = str(plan.get("release", "unknown"))
+        _backup_plan(plan_file, release_name)
+
+    # Determine which day numbers are already completed
+    if using_stories:
+        # New format: completion is explicit via status: shipped
+        completed_days: set[int] = {
+            day_num for day_num, s in story_entries
+            if s.get("status") == "shipped"
+        }
+        existing_actuals: dict[int, float] = {}
+    else:
+        # Legacy format: completion detected from .pace/day-N/ artifacts
+        existing_actuals = _load_existing_actuals() if replan else {}
+        completed_days = set(existing_actuals.keys()) if replan else set()
 
     # Load existing estimates to preserve them for completed days during re-plan
     existing_estimates: dict[int, dict] = {}
@@ -143,20 +206,18 @@ def run_planner(plan: dict, model: str, replan: bool = False) -> dict:
                 existing_estimates[e["day"]] = e
 
     if replan:
-        completed_days = set(existing_actuals.keys())
-        remaining = [d for d in days if d["day"] not in completed_days]
+        remaining_count = sum(1 for day_num, _ in story_entries if day_num not in completed_days)
         print(
-            f"[PACE] Day 0 (re-plan): {len(completed_days)} days completed with actuals, "
-            f"re-estimating {len(remaining)} remaining days using {model}..."
+            f"[PACE] Day 0 (re-plan): {len(completed_days)} stories completed, "
+            f"re-estimating {remaining_count} remaining using {model}..."
         )
     else:
-        print(f"[PACE] Day 0: Estimating cost for {len(days)} sprint days using {model}...")
+        print(f"[PACE] Day 0: Estimating cost for {len(story_entries)} sprint days using {model}...")
 
     estimates = []
 
-    for entry in days:
-        day = entry["day"]
-        target = entry.get("target", "")
+    for day, entry in story_entries:
+        target = entry.get("target") or entry.get("title", "")
 
         if entry.get("human_gate"):
             estimates.append({
@@ -171,7 +232,8 @@ def run_planner(plan: dict, model: str, replan: bool = False) -> dict:
             continue
 
         # For completed days in re-plan mode: preserve existing estimate, attach actual
-        if replan and day in existing_actuals:
+        if replan and day in completed_days:
+            actual_cost = existing_actuals.get(day)
             est = existing_estimates.get(day, {
                 "day": day,
                 "target": target[:80],
@@ -179,12 +241,10 @@ def run_planner(plan: dict, model: str, replan: bool = False) -> dict:
                 "predicted_cost_usd": 0.0,
                 "reasoning": "Estimate not available (completed before re-plan).",
             })
-            est["actual_cost_usd"] = existing_actuals[day]
+            est["actual_cost_usd"] = actual_cost
             estimates.append(est)
-            print(
-                f"[PACE]   Day {day}: COMPLETED — actual ${existing_actuals[day]:.2f} "
-                f"(est ${est.get('predicted_cost_usd', 0):.2f})"
-            )
+            cost_str = f"${actual_cost:.2f}" if actual_cost is not None else "N/A"
+            print(f"[PACE]   Day {day}: COMPLETED — actual {cost_str} (est ${est.get('predicted_cost_usd', 0):.2f})")
             continue
 
         try:

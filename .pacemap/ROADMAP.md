@@ -554,7 +554,7 @@ Constraints:
 
 ### Item 15: plan.yaml Versioning & Story Naming
 
-> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Planned
+> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Merged — PR #28 (2026-03-17)
 
 #### Assessment
 
@@ -738,7 +738,7 @@ v2.2        ──►  Item 11 (Training Data Pipeline)       [DELIVERED]
 v3.0        ──►  Item 12 (Context Directory Versioning) [PLANNED]
                  Item 13 (Context Auto-Refresh)         [PLANNED]
                  Item 14 (Multi-Release Configuration)  [PLANNED]
-                 Item 15 (plan.yaml & Story Naming)     [PLANNED]
+                 Item 15 (plan.yaml & Story Naming)     [MERGED PR #28]
                  Item 16 (Pre-run Validation Extended)  [PLANNED]
                  Item 17 (.pacemap Directory)            [PLANNED]
                  Item 18 (CHANGELOG.md)                 [PLANNED]

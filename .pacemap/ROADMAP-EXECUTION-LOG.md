@@ -1114,5 +1114,24 @@ All 11 deferred steps across Items 1–8 implemented:
 | 6 | `pace/planner.py` | `run_planner()` calls `_check_context_freshness()` when `replan=True` |
 | 7 | `pace/config_tester.py` | `_KNOWN_SOURCE_DOCS` list + `_validate_source_docs()` — suggests adding README/PRD/SRS when none found in repo root |
 
-*ROADMAP Execution Log v2.5 — 2026-03-17 IST (Sprint 6.3 Items 12 + 13 documented)*
+---
+
+### Sprint 6.3 — Item 15: plan.yaml Versioning & Story Naming (2026-03-17)
+
+**Branch:** `feature/plan-yaml-versioning`
+**Issue:** #18
+**Tests:** 364 passing, 83% coverage (29 new in `tests/test_plan_yaml_versioning.py`)
+
+| Step | File | Change |
+| ---- | ---- | ------ |
+| 1 | `pace/schemas.py` | `PLAN_SCHEMA` — JSON schema for `stories:` format plan.yaml |
+| 2 | `pace/planner.py` | `_iter_stories()` — normalises both `stories:` and legacy `days:` to `(day_num, entry)` pairs |
+| 2 | `pace/planner.py` | `_get_replan_boundary()` — returns index of last shipped story |
+| 2 | `pace/planner.py` | `_backup_plan()` — copies plan.yaml to `.pace/releases/<release>/plan.yaml.bak.<iso-datetime>`; prunes backups older than 30 days |
+| 3 | `pace/planner.py` | `run_planner()` — detects `stories:` format; uses `status: shipped` for completion; calls `_backup_plan()` on replan |
+| 4 | `pace/orchestrator.py` | `get_day_plan()` — supports `stories:` key with `story-N` id; adds `target` alias for `title`; falls back to legacy `days:` |
+| 5 | `pace/config_tester.py` | `_validate_plan()` — warns on missing `release` field and shipped stories without `shipped_at` |
+| 6 | `pace/migrations/v3_plan_naming.py` | New migration: renames `day-N` entries to `story-N`; adds `status: shipped` based on `.pace/day-N/handoff.yaml`; supports `--dry-run` |
+
+*ROADMAP Execution Log v2.6 — 2026-03-17 IST (Sprint 6.3 Items 12–15 documented)*
 *Author: Vipul Meehnia*

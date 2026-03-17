@@ -103,6 +103,34 @@ CONDUIT_REPORT_SCHEMA = {
     "additionalProperties": True,
 }
 
+PLAN_SCHEMA = {
+    "type": "object",
+    "required": ["release", "stories"],
+    "properties": {
+        "release": {"type": "string"},
+        "context_version": {"type": "string"},
+        "stories": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["id", "title", "status"],
+                "properties": {
+                    "id": {"type": "string", "pattern": "^story-[0-9]+$"},
+                    "title": {"type": "string"},
+                    "status": {
+                        "type": "string",
+                        "enum": ["pending", "in_progress", "shipped", "hold"],
+                    },
+                    "shipped_at": {"type": ["string", "null"]},
+                    "human_gate": {"type": "boolean"},
+                },
+                "additionalProperties": True,
+            },
+        },
+    },
+    "additionalProperties": True,
+}
+
 CONTEXT_MANIFEST_SCHEMA = {
     "type": "object",
     "required": ["release", "generated_at", "source_hashes", "files"],
