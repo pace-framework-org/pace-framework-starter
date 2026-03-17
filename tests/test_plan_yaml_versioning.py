@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import yaml
 import pytest
@@ -164,7 +164,7 @@ def test_run_planner_stories_preserves_shipped(tmp_path):
              "day": 2, "predicted_iterations": 5,
              "predicted_cost_usd": 1.5, "reasoning": "medium",
          }) as mock_est:
-        report = planner.run_planner(plan, "claude-sonnet-4-6", replan=True)
+        planner.run_planner(plan, "claude-sonnet-4-6", replan=True)
 
     # _estimate_day_cost must only be called for story-2 (pending), not story-1 (shipped)
     assert mock_est.call_count == 1
