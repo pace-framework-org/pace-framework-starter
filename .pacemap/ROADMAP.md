@@ -449,7 +449,7 @@ Phase 6 addresses structural gaps that became apparent after operating PACE v2.0
 
 ### Item 12: Release-Scoped Context Directory Versioning
 
-> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Planned
+> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Merged — PR #TBD (2026-03-17)
 
 **Assessment**
 

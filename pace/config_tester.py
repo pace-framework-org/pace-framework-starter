@@ -631,6 +631,50 @@ def _validate_training(raw: dict, r: ConfigTestResult) -> None:
         )
 
 
+_KNOWN_CONTEXT_DOCS = {"product.md", "engineering.md", "security.md", "devops.md"}
+
+
+def _validate_context_manifest(r: ConfigTestResult) -> None:
+    """Warn if .pace/context/ contains docs with no matching context.manifest.yaml entry.
+
+    This detects manually edited context files that bypassed the versioning
+    system introduced in Item 12 (v3.0).
+    """
+    context_dir = Path(__file__).parent.parent / ".pace" / "context"
+    if not context_dir.exists():
+        return  # No context directory yet — nothing to validate
+
+    manifest_path = context_dir / "context.manifest.yaml"
+    if not manifest_path.exists():
+        # Context docs present but no manifest → pre-v3 state
+        present = [f.name for f in context_dir.iterdir() if f.name in _KNOWN_CONTEXT_DOCS]
+        if present:
+            r.warn(
+                f".pace/context/ contains {present} but no context.manifest.yaml — "
+                "these were likely generated before v3.0. Run "
+                "`python pace/migrations/v3_context_versioning.py` to archive them "
+                "and let SCRIBE regenerate with versioning enabled."
+            )
+        return
+
+    try:
+        tracked = set(yaml.safe_load(manifest_path.read_text()).get("files", []))
+    except Exception:
+        r.warn(".pace/context/context.manifest.yaml exists but could not be parsed")
+        return
+
+    untracked = [
+        f.name for f in context_dir.iterdir()
+        if f.name in _KNOWN_CONTEXT_DOCS and f.name not in tracked
+    ]
+    if untracked:
+        r.warn(
+            f".pace/context/ contains {untracked} not listed in context.manifest.yaml — "
+            "these files may have been edited manually and will be treated as stale "
+            "by the versioning system."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
@@ -668,6 +712,7 @@ def run_config_test(config_file: Path = CONFIG_FILE) -> ConfigTestResult:
     _validate_cron(raw, r)
     _validate_reporter(raw, r)
     _validate_training(raw, r)
+    _validate_context_manifest(r)
 
     return r
 

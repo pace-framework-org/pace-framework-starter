@@ -102,3 +102,21 @@ CONDUIT_REPORT_SCHEMA = {
     },
     "additionalProperties": True,
 }
+
+CONTEXT_MANIFEST_SCHEMA = {
+    "type": "object",
+    "required": ["release", "generated_at", "source_hashes", "files"],
+    "properties": {
+        "release": {"type": "string"},
+        "generated_at": {"type": "string"},  # ISO-8601 UTC timestamp
+        "source_hashes": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},  # filename → SHA-256 hex
+        },
+        "files": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "additionalProperties": True,
+}
