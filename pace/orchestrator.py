@@ -697,7 +697,21 @@ def main() -> None:
         tracker.post_handoff_comment(day, day_dir)
     except Exception as exc:
         print(f"[PACE] Day {day}: Tracker SHIP updates failed (non-fatal): {exc}")
+    # Item 18: append shipped story to CHANGELOG.md ## [Unreleased] — best-effort
+    _update_changelog_on_ship(day, story_card)
     sys.exit(0)
+
+
+def _update_changelog_on_ship(day: int, story_card: dict) -> None:
+    """Append the shipped story to CHANGELOG.md ## [Unreleased]. Non-fatal."""
+    try:
+        from pacemap import update_changelog_story_shipped
+        release = load_config().release.name if load_config().release else ""
+        update_changelog_story_shipped(
+            f"Day {day}", release, story_card.get("story", "")
+        )
+    except Exception as exc:
+        print(f"[PACE] Day {day}: CHANGELOG.md update skipped (non-fatal): {exc}")
 
 
 def _try_open_staging_pr(

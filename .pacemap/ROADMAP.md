@@ -663,7 +663,7 @@ Versioning rules:
 
 ### Item 18: CHANGELOG.md
 
-> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Planned
+> **@Since** `v3.0` &nbsp;·&nbsp; **Status:** Merged — PR #TBD (2026-03-17)
 
 **Assessment**
 

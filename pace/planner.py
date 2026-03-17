@@ -252,6 +252,27 @@ def _write_shipped_manifest(shipped_days: list[int]) -> None:
 # Pipeline entrypoint
 # ---------------------------------------------------------------------------
 
+def _record_planned_stories_in_changelog(plan: dict, report: dict) -> None:
+    """Add a ## [Unreleased] note to CHANGELOG.md listing planned story titles.
+
+    Non-fatal: any failure is caught and printed as a warning.
+    """
+    try:
+        from pacemap import update_changelog_story_shipped
+
+        days: list[dict] = plan.get("days", [])
+        release = plan.get("release", "")
+        for day in days:
+            day_num = day.get("day")
+            story = day.get("story", "")
+            if day_num and story:
+                update_changelog_story_shipped(
+                    f"Day {day_num} (planned)", release, story
+                )
+    except Exception as exc:
+        print(f"[PACE] CHANGELOG.md update skipped (non-fatal): {exc}")
+
+
 def run_pipeline(plan: dict, model: str, force_replan: bool = False) -> None:
     """Pipeline mode: re-estimate remaining work, protect shipped days, pause cycle.
 
@@ -287,6 +308,9 @@ def run_pipeline(plan: dict, model: str, force_replan: bool = False) -> None:
         f"Total re-estimated cost: ${total:.2f}. "
         f"Commit .pace/day-0/planner.md and .pace/shipped.yaml, then open the plan-approval PR."
     )
+
+    # Item 18: record planned stories in CHANGELOG.md ## [Unreleased] section.
+    _record_planned_stories_in_changelog(plan, report)
 
 
 # ---------------------------------------------------------------------------
