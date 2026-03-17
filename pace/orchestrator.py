@@ -193,10 +193,19 @@ def get_current_day() -> int:
 
 
 def get_day_plan(plan: dict, day: int) -> dict:
-    for d in plan["days"]:
+    # New plan.yaml: stories list with id: story-N
+    for s in plan.get("stories", []):
+        if s.get("id") == f"story-{day}":
+            # Provide 'target' alias for 'title' so the rest of the orchestrator
+            # can use entry.get("target") regardless of plan format.
+            if "title" in s and "target" not in s:
+                return {**s, "target": s["title"]}
+            return s
+    # Legacy: days list with day: N
+    for d in plan.get("days", []):
         if d["day"] == day:
             return d
-    raise ValueError(f"Day {day} not found in plan.yaml — add the day entry and retry.")
+    raise ValueError(f"Day {day} not found in plan.yaml — add a story-{day} entry and retry.")
 
 
 def get_recent_gate_reports(day: int, count: int = 3) -> list[str]:
@@ -747,7 +756,7 @@ def _try_open_staging_pr(
                 f"*Auto-opened by CONDUIT after SHIP — Day {day}.*\n"
                 f"Review and merge to incorporate this story into `{base_branch}`."
             ),
-            labels=["pace-story", f"pace-day-{day}"],
+            labels=["pace-story", f"pace-story-{day}"],
         )
     except Exception as exc:
         print(f"[PACE] Day {day}: staging PR creation skipped (non-fatal): {exc}")

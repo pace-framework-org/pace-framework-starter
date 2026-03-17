@@ -695,6 +695,37 @@ def _validate_context_manifest(r: ConfigTestResult) -> None:
         )
 
 
+_PLAN_FILE = Path(__file__).parent.parent / "plan.yaml"
+
+
+def _validate_plan(r: ConfigTestResult) -> None:
+    """Validate plan.yaml schema and story completion data.
+
+    Warns if plan.yaml lacks a 'release' field (suggests pre-v3 format) or if
+    any story with status: shipped is missing its shipped_at date.
+    """
+    if not _PLAN_FILE.exists():
+        return
+    try:
+        data = yaml.safe_load(_PLAN_FILE.read_text()) or {}
+    except yaml.YAMLError as exc:
+        r.warn(f"plan.yaml parse error: {exc}")
+        return
+
+    if "release" not in data:
+        r.warn(
+            "plan.yaml is missing a 'release' field — run "
+            "`python pace/migrations/v3_plan_naming.py` to upgrade to the v3 schema."
+        )
+
+    for s in data.get("stories", []):
+        if s.get("status") == "shipped" and not s.get("shipped_at"):
+            r.warn(
+                f"Story {s.get('id', '?')} has status: shipped but no shipped_at date — "
+                "set shipped_at to the delivery date."
+            )
+
+
 # ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
@@ -734,6 +765,7 @@ def run_config_test(config_file: Path = CONFIG_FILE) -> ConfigTestResult:
     _validate_reporter(raw, r)
     _validate_training(raw, r)
     _validate_context_manifest(r)
+    _validate_plan(r)
 
     return r
 
