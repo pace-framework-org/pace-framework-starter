@@ -78,6 +78,8 @@ class ReleaseConfig:
     name: str               # Release version/name (e.g. "v2.0", "q1-2026")
     release_days: int = 90  # Total calendar days in the release
     sprint_days: int = 7    # Days per sprint (1–release_days)
+    plan_file: str = ""     # Path to plan.yaml for this release (e.g. ".pace/releases/v2.0/plan.yaml")
+    status: str = "active"  # "active" | "completed" | "planned"
 
 
 @dataclass
@@ -195,7 +197,7 @@ class PaceConfig:
     forge: ForgeConfig               # FORGE agent behaviour (TDD, coverage rule)
     advisory_push_to_issues: bool  # Whether to open issues for backlogged advisory findings
     reporter_timezone: str = "UTC"  # IANA timezone for timestamps (e.g. "America/New_York")
-    release: ReleaseConfig | None = None  # v2.0 release/sprint branching model (optional)
+    releases: list[ReleaseConfig] | None = None  # v3.0 multi-release list (replaces singular release:)
     updates: UpdatesConfig = None  # type: ignore[assignment]  # auto-update behaviour
     cron: CronConfig = None  # type: ignore[assignment]  # CI pipeline schedules
     notifications: NotificationsConfig | None = None  # notification channel credentials
@@ -210,6 +212,34 @@ class PaceConfig:
             self.cron = CronConfig()
         if self.training is None:
             self.training = TrainingConfig()
+
+    @property
+    def active_release(self) -> ReleaseConfig | None:
+        """Return the single active release, respecting PACE_RELEASE env-var override.
+
+        - If PACE_RELEASE is set, returns the release whose name matches (case-sensitive).
+        - Otherwise returns the release with status == "active".
+        - Returns None if releases is empty or None.
+        - Raises ValueError if multiple releases have status == "active" and no env-var override.
+        """
+        import os
+        if not self.releases:
+            return None
+        override = os.environ.get("PACE_RELEASE", "").strip()
+        if override:
+            for r in self.releases:
+                if r.name == override:
+                    return r
+            return None  # override set but no matching release — treat as unconfigured
+        active = [r for r in self.releases if r.status == "active"]
+        if len(active) == 1:
+            return active[0]
+        if len(active) > 1:
+            raise ValueError(
+                f"pace.config.yaml: {len(active)} releases have status: active — "
+                "exactly one is required. Set PACE_RELEASE=<name> to override."
+            )
+        return None  # zero active releases
 
     def source_dirs_table(self) -> str:
         """Return a formatted table of source directories for use in agent system prompts."""
@@ -309,10 +339,9 @@ def _parse_training(raw: dict) -> TrainingConfig:
     )
 
 
-@lru_cache(maxsize=1)
-def load_config() -> PaceConfig:
-    """Load and return the PaceConfig. Cached — safe to call multiple times."""
-    with open(CONFIG_FILE) as f:
+def _load_config_from_path(config_file: Path) -> PaceConfig:
+    """Parse *config_file* and return a PaceConfig. Not cached."""
+    with open(config_file) as f:
         raw = yaml.safe_load(f)
 
     product = raw.get("product", {})
@@ -380,16 +409,33 @@ def load_config() -> PaceConfig:
         max_iterations=int(forge_raw.get("max_iterations", 35)),
     )
 
+    # v3.0: prefer releases: list; fall back to legacy release: dict for backward compat
+    releases_raw = raw.get("releases")
     release_raw = raw.get("release")
-    release = (
-        ReleaseConfig(
-            name=str(release_raw["name"]),
-            release_days=int(release_raw.get("release_days", 90)),
-            sprint_days=int(release_raw.get("sprint_days", 7)),
-        )
-        if release_raw and release_raw.get("name")
-        else None
-    )
+    releases: list[ReleaseConfig] | None = None
+    if releases_raw and isinstance(releases_raw, list):
+        releases = [
+            ReleaseConfig(
+                name=str(r["name"]),
+                release_days=int(r.get("release_days", 90)),
+                sprint_days=int(r.get("sprint_days", 7)),
+                plan_file=str(r.get("plan_file", "")),
+                status=str(r.get("status", "active")),
+            )
+            for r in releases_raw
+            if r and r.get("name")
+        ] or None
+    elif release_raw and release_raw.get("name"):
+        # Legacy single release: key — wrapped as a one-entry list with status: active
+        releases = [
+            ReleaseConfig(
+                name=str(release_raw["name"]),
+                release_days=int(release_raw.get("release_days", 90)),
+                sprint_days=int(release_raw.get("sprint_days", 7)),
+                plan_file=str(release_raw.get("plan_file", "")),
+                status="active",
+            )
+        ]
 
     updates_raw = raw.get("updates", {}) or {}
     updates = UpdatesConfig(
@@ -426,7 +472,7 @@ def load_config() -> PaceConfig:
         forge=forge,
         advisory_push_to_issues=bool(advisory_raw.get("push_to_issues", False)),
         reporter_timezone=reporter_raw.get("timezone", "UTC"),
-        release=release,
+        releases=releases,
         updates=updates,
         cron=cron,
         notifications=notifications,
@@ -434,3 +480,9 @@ def load_config() -> PaceConfig:
         plugins=plugins,
         training=training,
     )
+
+
+@lru_cache(maxsize=1)
+def load_config() -> PaceConfig:
+    """Load and return the PaceConfig from the default location. Cached."""
+    return _load_config_from_path(CONFIG_FILE)

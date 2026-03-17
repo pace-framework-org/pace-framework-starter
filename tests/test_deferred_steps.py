@@ -388,7 +388,7 @@ def test_try_open_staging_pr_skips_without_commit(monkeypatch):
     mock_ba = MagicMock()
     with patch("orchestrator.load_config") as mock_cfg, \
          patch("orchestrator.subprocess.run") as mock_run:
-        mock_cfg.return_value.release = MagicMock(name="v2.0")
+        mock_cfg.return_value.active_release = MagicMock(name="v2.0")
         orchestrator._try_open_staging_pr(1, "story", "", {"conclusion": "success"})
     mock_ba.create_pull_request.assert_not_called()
 
@@ -397,7 +397,7 @@ def test_try_open_staging_pr_skips_when_ci_failed(monkeypatch):
     import orchestrator
     mock_ba = MagicMock()
     with patch("orchestrator.load_config") as mock_cfg:
-        mock_cfg.return_value.release = MagicMock(name="v2.0")
+        mock_cfg.return_value.active_release = MagicMock(name="v2.0")
         orchestrator._try_open_staging_pr(1, "story", "abc123", {"conclusion": "failure"})
     mock_ba.create_pull_request.assert_not_called()
 
@@ -406,7 +406,7 @@ def test_try_open_staging_pr_skips_without_release_config(monkeypatch):
     import orchestrator
     mock_ba = MagicMock()
     with patch("orchestrator.load_config") as mock_cfg:
-        mock_cfg.return_value.release = None
+        mock_cfg.return_value.active_release = None
         orchestrator._try_open_staging_pr(1, "story", "abc123", {"conclusion": "success"})
     mock_ba.create_pull_request.assert_not_called()
 
@@ -427,7 +427,7 @@ def test_try_open_staging_pr_opens_pr_on_success(tmp_path, monkeypatch):
     with patch("orchestrator.load_config") as mock_cfg, \
          patch("orchestrator.subprocess.run", return_value=mock_run_result), \
          patch("branching.get_branching_adapter", return_value=mock_ba):
-        mock_cfg.return_value.release = mock_release
+        mock_cfg.return_value.active_release = mock_release
         orchestrator._try_open_staging_pr(3, "As a user I can login", "abc123", {"conclusion": "success"})
 
     mock_ba.create_pull_request.assert_called_once()

@@ -121,37 +121,90 @@ def _validate_sprint(raw: dict, r: ConfigTestResult) -> None:
     duration = sprint.get("duration_days", 30)
     if not isinstance(duration, int) or duration <= 0:
         r.error(f"sprint.duration_days must be a positive integer, got: {duration!r}")
-    # Cross-check with release if present
-    release = raw.get("release", {})
-    if release:
-        sprint_days = release.get("sprint_days", 7)
-        release_days = release.get("release_days", 90)
-        if (
-            isinstance(sprint_days, int) and isinstance(release_days, int)
-            and sprint_days > release_days
-        ):
-            r.warn(
-                f"release.sprint_days ({sprint_days}) > release.release_days ({release_days}) — "
-                "a sprint cannot be longer than the release"
-            )
 
 
-def _validate_release(raw: dict, r: ConfigTestResult) -> None:
-    release = raw.get("release")
-    if release is None:
+_VALID_RELEASE_STATUSES = {"active", "completed", "planned"}
+
+
+def _validate_releases(raw: dict, r: ConfigTestResult) -> None:
+    """Validate the v3.0 releases: list (or legacy release: dict)."""
+    releases_raw = raw.get("releases")
+    release_raw = raw.get("release")
+
+    if releases_raw is None and release_raw is None:
         r.suggest(
-            "release section is not configured; PACE v2.0 supports a full "
-            "release/sprint branching model — see .pacemap/ROADMAP.md Item 1"
+            "releases section is not configured; PACE v3.0 supports multi-release "
+            "branching — see .pacemap/ROADMAP.md Item 14"
         )
         return
-    if not release.get("name"):
-        r.error("release.name is required when release section is present")
-    release_days = release.get("release_days", 0)
-    sprint_days = release.get("sprint_days", 0)
-    if not isinstance(release_days, int) or release_days <= 0:
-        r.error(f"release.release_days must be a positive integer, got: {release_days!r}")
-    if not isinstance(sprint_days, int) or sprint_days <= 0:
-        r.error(f"release.sprint_days must be a positive integer, got: {sprint_days!r}")
+
+    # Legacy single release: key
+    if releases_raw is None and release_raw is not None:
+        if not release_raw.get("name"):
+            r.error("release.name is required when release section is present")
+        release_days = release_raw.get("release_days", 0)
+        sprint_days = release_raw.get("sprint_days", 0)
+        if not isinstance(release_days, int) or release_days <= 0:
+            r.error(f"release.release_days must be a positive integer, got: {release_days!r}")
+        if not isinstance(sprint_days, int) or sprint_days <= 0:
+            r.error(f"release.sprint_days must be a positive integer, got: {sprint_days!r}")
+        r.suggest(
+            "release: (singular) is the v2.0 format; migrate to releases: list for "
+            "multi-release support — run `python pace/migrations/v3_multi_release.py`"
+        )
+        return
+
+    if not isinstance(releases_raw, list) or not releases_raw:
+        r.error("releases must be a non-empty list")
+        return
+
+    names: list[str] = []
+    active_count = 0
+
+    for i, entry in enumerate(releases_raw):
+        if not isinstance(entry, dict):
+            r.error(f"releases[{i}] must be a mapping, got: {type(entry).__name__}")
+            continue
+        name = entry.get("name", "")
+        if not name:
+            r.error(f"releases[{i}].name is required")
+        else:
+            if name in names:
+                r.error(f"releases[{i}].name '{name}' is duplicated — names must be unique")
+            names.append(name)
+
+        release_days = entry.get("release_days", 0)
+        sprint_days = entry.get("sprint_days", 0)
+        if not isinstance(release_days, int) or release_days <= 0:
+            r.error(f"releases[{i}].release_days must be a positive integer, got: {release_days!r}")
+        if not isinstance(sprint_days, int) or sprint_days <= 0:
+            r.error(f"releases[{i}].sprint_days must be a positive integer, got: {sprint_days!r}")
+        if (
+            isinstance(sprint_days, int) and isinstance(release_days, int)
+            and sprint_days > 0 and release_days > 0
+            and sprint_days > release_days
+        ):
+            r.error(
+                f"releases[{i}] ('{name}'): sprint_days ({sprint_days}) > "
+                f"release_days ({release_days}) — a sprint cannot be longer than the release"
+            )
+
+        status = entry.get("status", "active")
+        if status not in _VALID_RELEASE_STATUSES:
+            r.error(
+                f"releases[{i}].status '{status}' is invalid; "
+                f"must be one of: {', '.join(sorted(_VALID_RELEASE_STATUSES))}"
+            )
+        if status == "active":
+            active_count += 1
+
+    if active_count == 0:
+        r.error("releases: no entry has status: active — exactly one is required")
+    elif active_count > 1:
+        r.error(
+            f"releases: {active_count} entries have status: active — "
+            "exactly one is required (use PACE_RELEASE=<name> to override at runtime)"
+        )
 
 
 def _validate_source(raw: dict, r: ConfigTestResult) -> None:
@@ -602,7 +655,7 @@ def run_config_test(config_file: Path = CONFIG_FILE) -> ConfigTestResult:
 
     _validate_product(raw, r)
     _validate_sprint(raw, r)
-    _validate_release(raw, r)
+    _validate_releases(raw, r)
     _validate_source(raw, r)
     _validate_tech(raw, r)
     _validate_platform(raw, r)
