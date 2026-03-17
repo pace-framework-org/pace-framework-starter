@@ -994,13 +994,18 @@ Deferred steps are isolated fixes to already-delivered items and have no depende
 | Item 7 (Platform Finalization) | #10 | ✅ 2026-03-15 |
 | Item 10 (Plugin System) | #11 | ✅ 2026-03-15 |
 | Item 11 (Training Data Pipeline) | #12 | ✅ 2026-03-15 |
-| Deferred Steps Cleanup (Items 1–8) | #TBD | 🔄 2026-03-16 (PR open) |
+| Deferred Steps Cleanup (Items 1–8) | #21 | ✅ 2026-03-16 |
+| fix/pace-planner-yaml-syntax | #TBD | 🔄 2026-03-17 (PR open) |
 
 ## Pending Work
 
 | Item | Status | Next Action |
 | ---- | ------ | ----------- |
-| Phase 6 (Items 12–18) | Blocked | Merge deferred-steps-cleanup PR first |
+| Phase 6 Sprint 6.1 — Item 17 (.pacemap/) | Up next | `feature/pacemap-directory` |
+| Phase 6 Sprint 6.1 — Item 18 (CHANGELOG.md) | Blocked on 17 | `feature/changelog-md` |
+| Phase 6 Sprint 6.2 — Item 14 (Multi-Release) | Blocked on 6.1 | `feature/multi-release-config` |
+| Phase 6 Sprint 6.3 — Items 12, 13 (Context) | Blocked on 6.2 | `feature/context-versioning` |
+| Items 15, 16 | Blocked on 6.2 | pending |
 | Integration tests (Items 6, 7) | Not started | Platform adapter fixtures |
 
 ---
@@ -1027,5 +1032,17 @@ All 11 deferred steps across Items 1–8 implemented:
 
 ---
 
-*ROADMAP Execution Log v2.0 — 2026-03-16 IST (Deferred Steps Cleanup sprint documented; Phase 6 unblocked pending PR merge)*
+### fix/pace-planner-yaml-syntax — Fix Entry (2026-03-17)
+
+**Branch:** `fix/pace-planner-yaml-syntax`
+**Tests:** 257 passing, 83% coverage (no new tests — pure workflow YAML change)
+
+| File | Change |
+| ---- | ------ |
+| `.github/workflows/pace-planner.yml` | Replace multi-line `git commit -m "..."` (column-0 body broke YAML block scalar) with single-line `printf` form |
+| `.github/workflows/pace-planner.yml` | Replace bash heredoc `<<'PRBODY'` in `run:` block with `PR_BODY` env-var block scalar (column-0 heredoc content terminated YAML block scalar prematurely) |
+
+---
+
+*ROADMAP Execution Log v2.1 — 2026-03-17 IST (YAML syntax fix documented; Pending Work updated for Phase 6 sprint order)*
 *Author: Vipul Meehnia*
