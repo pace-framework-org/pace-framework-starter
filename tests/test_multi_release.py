@@ -65,19 +65,19 @@ def test_release_config_defaults():
 def _make_pace_config(releases):
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent / "pace"))
-    import config as _cfg  # noqa: PLC0415
-    return _cfg.PaceConfig(
+    from config import PaceConfig, TechConfig, LLMConfig, CostControlConfig, ForgeConfig  # noqa: PLC0415
+    return PaceConfig(
         product_name="Test", product_description="test", github_org="org",
         sprint_duration_days=14, source_dirs=[], docs_dir=None,
-        tech=_cfg.TechConfig(
+        tech=TechConfig(
             primary_language="Python 3.12", secondary_language=None,
             ci_system="GitHub Actions", test_command="pytest", build_command=None,
         ),
         ci_type="github", tracker_type="github",
-        llm=_cfg.LLMConfig(provider="anthropic", model="claude-sonnet-4-6",
-                            analysis_model="claude-sonnet-4-6", base_url=None),
-        cost_control=_cfg.CostControlConfig(),
-        forge=_cfg.ForgeConfig(),
+        llm=LLMConfig(provider="anthropic", model="claude-sonnet-4-6",
+                      analysis_model="claude-sonnet-4-6", base_url=None),
+        cost_control=CostControlConfig(),
+        forge=ForgeConfig(),
         advisory_push_to_issues=False,
         releases=releases,
     )
