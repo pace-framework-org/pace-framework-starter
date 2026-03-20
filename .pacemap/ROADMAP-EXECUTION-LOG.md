@@ -2,7 +2,7 @@
 
 **Author:** Vipul Meehnia
 **Started:** 2026-03-13 (IST — Asia/Kolkata)
-**Log Version:** 2.7
+**Log Version:** 2.9
 **Aligned With:** ROADMAP v1.5
 
 ---
@@ -22,13 +22,15 @@
 | 1.8 | 2026-03-16 | Item 11 (PR #12) confirmed merged; ROADMAP extended to v1.4 with Phase 6 (Items 12–18, Planned); Item 7 status corrected in ROADMAP; unit test suite added (223 tests, 82.76% coverage) |
 | 1.9 | 2026-03-16 | Add missing Phase 4 body section (Item 10 Plugin System); document post-Phase4 stability fixes; remove stale Pending Phase 1 Work section; correct Item 9 PR reference (direct commit, not PR #1) |
 | 2.0 | 2026-03-16 | Phase 6 formal execution plan: dependency order, sprint breakdown, branch naming, GitHub issues created (Items 12–18 + deferred steps); ROADMAP aligned to v1.5 |
-| 2.1 | 2026-03-17 | Sprint 6.1 complete: Item 12 (Context Versioning) PR #16 merged; `context_manifest.yaml`, `CONTEXT_MANIFEST_SCHEMA`, `_write_context_manifest`, `_validate_context_manifest` delivered |
-| 2.2 | 2026-03-17 | Sprint 6.2 start: Item 14 (Config Tester Foundation) PR #22 merged; `ConfigTestResult`, `_validate_releases`, `_validate_cross_fields`, `run_config_test`, full CLI delivered |
-| 2.3 | 2026-03-17 | Sprint 6.3 start: Item 13 (Context Auto-Refresh) implementation complete; `_archive_context`, `_check_context_freshness`, `force_refresh_context` in preflight.py; 18 tests added |
+| 2.1 | 2026-03-17 | Sprint 6.1 complete: Items 17 (.pacemap, PR #23) and 18 (CHANGELOG, PR #24) merged |
+| 2.2 | 2026-03-17 | Sprint 6.2 complete: Item 14 (Multi-Release Config, PR #25) merged; `ConfigTestResult`, `_validate_releases`, `_validate_cross_fields`, `run_config_test`, full CLI delivered |
+| 2.3 | 2026-03-17 | Sprint 6.3 start: Item 12 (Context Versioning, PR #26) merged; Item 13 (Context Auto-Refresh) implementation complete |
 | 2.4 | 2026-03-17 | Item 13 PR #27 opened, merged, issue #17 closed |
 | 2.5 | 2026-03-17 | Item 15 (plan.yaml Versioning & Story Naming) delivered: `PLAN_SCHEMA`, `_iter_stories`, `_get_replan_boundary`, `_backup_plan`, `v3_plan_naming.py` migration, orchestrator `get_day_plan` update, `_validate_plan` in config_tester; 29 tests; PR #28 merged, issue #18 closed |
 | 2.6 | 2026-03-17 | Item 16 (Pre-run Config Validation Extended) delivered: `_validate_plan_files`, `--strict`/`--release` CLI flags, CI file updates (GitHub Actions, GitLab CI, Jenkinsfile, Bitbucket Pipelines); 14 tests; PR #30 merged, issue #19 closed |
 | 2.7 | 2026-03-17 | Execution log updated to v2.7; Pending Work table cleared; Sprint 6.3 fully complete |
+| 2.8 | 2026-03-20 | Corrected PR numbers for Items 17, 18, 14, 12 (were #TBD/#15/#16; actual #23/#24/#25/#26); updated Sprint 6.1 and 6.2 status to Complete; fixed v2.1/v2.2 version history entries; all PRs confirmed merged |
+| 2.9 | 2026-03-20 | Phase 7 planned (Items 19–26): Context Intelligence & FORGE Efficiency; ROADMAP bumped to v1.6; DOCS-ROADMAP.md created covering 8 doc changes across 5 new/updated files |
 
 ---
 
@@ -1003,16 +1005,18 @@ Deferred steps are isolated fixes to already-delivered items and have no depende
 | Item 11 (Training Data Pipeline) | #12 | ✅ 2026-03-15 |
 | Deferred Steps Cleanup (Items 1–8) | #21 | ✅ 2026-03-16 |
 | fix/pace-planner-yaml-syntax | #22 | ✅ 2026-03-17 |
-| Item 17 (.pacemap Directory) | #TBD | 🔄 2026-03-17 (PR open) |
-| Item 18 (CHANGELOG.md) | #TBD | 🔄 2026-03-17 (PR open, conflicts) |
-| Item 14 (Multi-Release Config) | #15 | 🔄 2026-03-17 (PR open) |
-| Item 12 (Context Versioning) | #16 | 🔄 2026-03-17 (PR open) |
+| Item 17 (.pacemap Directory) | #23 | ✅ 2026-03-17 |
+| Item 18 (CHANGELOG.md) | #24 | ✅ 2026-03-17 |
+| Item 14 (Multi-Release Config) | #25 | ✅ 2026-03-17 |
+| Item 12 (Context Versioning) | #26 | ✅ 2026-03-17 |
 
 ## Pending Work
 
 | Item | Status | Next Action |
 | ---- | ------ | ----------- |
-| Sprint 6.3 — Items 13, 15, 16 | Complete | All merged (PRs #27, #28, #29); issues #17, #18, #19 closed |
+| Sprint 6.1 — Items 17, 18 | Complete | PRs #23, #24 merged 2026-03-17 |
+| Sprint 6.2 — Item 14 | Complete | PR #25 merged 2026-03-17 |
+| Sprint 6.3 — Items 12, 13, 15, 16 | Complete | PRs #26, #27, #28, #30 merged; issues #17, #18, #19 closed |
 | Integration tests (Items 6, 7) | Not started | Platform adapter fixtures |
 
 ---
@@ -1020,6 +1024,7 @@ Deferred steps are isolated fixes to already-delivered items and have no depende
 ### Sprint 6.1 — Item 17: .pacemap Directory (2026-03-17)
 
 **Branch:** `feature/pacemap-directory`
+**PR:** #23 (merged 2026-03-17)
 **Issue:** #13
 **Tests:** 278 passing, 83% coverage (21 new in `tests/test_pacemap.py`)
 
@@ -1074,6 +1079,7 @@ All 11 deferred steps across Items 1–8 implemented:
 ### Sprint 6.2 — Item 14: Multi-Release Configuration (2026-03-17)
 
 **Branch:** `feature/multi-release-config`
+**PR:** #25 (merged 2026-03-17)
 **Issue:** #15
 **Tests:** 302 passing, 83% coverage (24 new in `tests/test_multi_release.py`)
 
@@ -1092,6 +1098,7 @@ All 11 deferred steps across Items 1–8 implemented:
 ### Sprint 6.3 — Item 12: Release-Scoped Context Directory Versioning (2026-03-17)
 
 **Branch:** `feature/context-versioning`
+**PR:** #26 (merged 2026-03-17)
 **Issue:** #16
 **Tests:** 321 passing, 83% coverage (19 new in `tests/test_context_versioning.py`)
 
@@ -1160,5 +1167,170 @@ All 11 deferred steps across Items 1–8 implemented:
 
 *Note: Step 1 (`_validate_releases`) and Step 3 (`_validate_cross_fields`) were already delivered by Item 14.*
 
-*ROADMAP Execution Log v2.7 — 2026-03-17 IST (Sprint 6.3 Items 12–16 documented)*
+---
+
+## Phase 7 — Context Intelligence & FORGE Efficiency (Planned)
+
+**Baseline:** PACE v3.0 (all Phase 6 items delivered)
+**Target:** v3.1 (Sprint 7.1–7.2), v3.2 (Sprint 7.3–7.4), v3.3 (Sprint 7.5)
+**ROADMAP version at planning:** v1.6
+**DOCS-ROADMAP:** `.pacemap/DOCS-ROADMAP.md`
+
+### Dependency Order
+
+```text
+Item 19 (Planner Context Refresh)  ──► No blocker — planner.py standalone
+Item 20 (Human-Gate Context Refresh) ─► No blocker — orchestrator.py standalone
+Items 21 + 22 + 23 (Stage 1)       ──► No blockers — forge.py pre-chat helpers
+Item 24 (Haiku Compression)         ──► Requires Items 21–23 validated first
+Item 25 (Pre-seeded File Map)       ──► Requires Item 19 (engineering.md fresh)
+Item 26 (Forked Subcontext)         ──► Requires Item 24 (compression reused)
+```
+
+### Sprint Breakdown
+
+| Sprint | Items | Branch pattern | Target |
+| ------ | ----- | -------------- | ------ |
+| 7.1 | 19, 20 | `feature/context-lifecycle-*` | v3.1 |
+| 7.2 | 21, 22, 23 | `feature/forge-efficiency-stage1` | v3.1 |
+| 7.3 | 24 | `feature/forge-haiku-compression` | v3.2 |
+| 7.4 | 25 | `feature/forge-file-hints` | v3.2 |
+| 7.5 | 26 | `feature/forge-forked-subcontext` | v3.3 |
+
+### Architectural Decisions
+
+**AD-P7-1: Items 19 and 20 ship in the same sprint but separate PRs**
+Both invoke `run_scribe()` at different trigger points. They share no code but
+both modify the SCRIBE call sites (planner.py and orchestrator.py respectively).
+Separate PRs keep each diff reviewable; no merge conflict risk since they touch
+different files.
+
+**AD-P7-2: Items 21, 22, 23 ship in a single PR**
+All three are pre-`adapter.chat()` message-list transformations in `forge.py`.
+They compose cleanly (eviction → dedup → suppression, in that order). Shipping
+together ensures the Stage 1 savings are measured as a combined baseline before
+Stage 2 work begins.
+
+**AD-P7-3: Item 24 (compression) is a prerequisite for Item 26 (fork)**
+Item 26 Phase C reuses `_compress_history()` from Item 24 to summarise the
+exploration context before discarding it. Item 24 must be validated in production
+on 10+ stories before Item 26 Phase C is enabled.
+
+**AD-P7-4: Item 26 is opt-in (`fork_enabled: false` default)**
+The forked subcontext changes FORGE's fundamental execution model. Shipping with
+`fork_enabled: false` allows users to opt in once they have validated Stage 1–3
+savings on their own stories, without any forced migration.
+
+**AD-P7-5: `analysis_model` used for compression and hints calls**
+Items 24 and 25 both make single-turn Haiku calls. They route through
+`analysis_model` (if configured) to stay consistent with GATE/SENTINEL/CONDUIT
+model routing. No new config key for this — it falls back to the main model if
+`analysis_model` is not set (and `compression_model` in ForgeConfig provides an
+override if needed).
+
+### Implementation Checklist
+
+#### Sprint 7.1 — Context Lifecycle
+
+##### Item 19: Planner-Triggered Context Refresh
+
+- [ ] `pace/planner.py` — call `_check_context_freshness()` in `run_pipeline()`
+      before `run_planner()`; call `run_scribe()` on stale/missing docs
+- [ ] `pace/planner.py` — set `context_refreshed` return flag; write
+      `context_refresh_summary` key into `.pace/day-0/planner.md`
+- [ ] `.github/workflows/pace-planner.yml` — add summary step logging refresh
+      status to PR body
+- [ ] `pace/config_tester.py` — add `_validate_context_docs()` warning when
+      `context.manifest.yaml` absent
+- [ ] `tests/test_planner_context_refresh.py` — 4 tests (fresh skip, stale
+      trigger, failure non-fatal, planner.md key present)
+- [ ] All tests pass, coverage ≥ 80%
+
+##### Item 20: Human-Gate Context Refresh
+
+- [ ] `pace/orchestrator.py` — call `run_scribe()` before `open_review_pr()`;
+      wrap in try/except; commit refreshed docs to working branch
+- [ ] `pace/platforms/base.py` — extend `open_review_pr()` with optional
+      `context_note: str | None` parameter
+- [ ] `pace/orchestrator.py` — build `context_note`; pass to `open_review_pr()`
+- [ ] `tests/test_human_gate_context.py` — 4 tests
+- [ ] All tests pass, coverage ≥ 80%
+
+#### Sprint 7.2 — FORGE Context Efficiency: Stage 1
+
+##### Items 21 + 22 + 23 (single PR)
+
+- [ ] `pace/agents/forge.py` — `_written_paths: set[str]`; update on
+      `write_file`; add `_evict_stale_reads(messages, written)` helper
+- [ ] `pace/agents/forge.py` — `_dedup_bash_results(messages)` helper; keyed
+      on full command string
+- [ ] `pace/agents/forge.py` — replace `write_file` tool_result content with
+      compact receipt at write time
+- [ ] `pace/agents/forge.py` — call eviction → dedup before each `adapter.chat()`
+- [ ] `tests/test_forge_eviction.py` — 4 tests
+- [ ] `tests/test_forge_dedup.py` — 4 tests
+- [ ] `tests/test_forge_write_suppression.py` — 3 tests
+- [ ] All tests pass, coverage ≥ 80%
+
+#### Sprint 7.3 — FORGE Context Efficiency: Stage 2
+
+##### Item 24: Haiku Context Compression
+
+- [ ] `pace/agents/forge.py` — `_compressed: bool = False`; detect RED-phase
+      trigger (first non-zero exit code); call `_compress_history()`
+- [ ] `pace/agents/forge.py` — `_compress_history(messages, model, written)`:
+      Haiku call with compression schema (4a), anti-hallucination prompt (4b),
+      written-paths verification (4d), fallback on failure (4e)
+- [ ] `pace/agents/forge.py` — single-trigger guard (4c)
+- [ ] `pace/config.py` — `ForgeConfig.compression_model: str | None`
+- [ ] `tests/test_forge_compression.py` — 5 tests (one per mitigation)
+- [ ] All tests pass, coverage ≥ 80%
+
+#### Sprint 7.4 — FORGE Context Efficiency: Stage 3
+
+##### Item 25: Pre-seeded File Map
+
+- [ ] `pace/agents/forge.py` — `_build_file_hints(story_card, cfg)`: Haiku
+      call over `engineering.md`; returns `list[str]`; appends `## File Hints`
+      to initial user message
+- [ ] `pace/agents/prime.py` — `disable_file_hints: bool` field on Story Card
+- [ ] `pace/agents/forge.py` — freshness check against `context.manifest.yaml`
+      (5d); confidence threshold gate (5b); disable_file_hints override (5e)
+- [ ] `pace/config.py` — `ForgeConfig.file_hints_enabled` and
+      `file_hints_confidence_threshold`
+- [ ] `tests/test_forge_file_hints.py` — 4 tests
+- [ ] All tests pass, coverage ≥ 80%
+
+#### Sprint 7.5 — FORGE Context Efficiency: Stage 4
+
+##### Item 26: Forked Subcontext (Phase A first)
+
+- [ ] Phase A: `commit_plan` tool definition + `_fork_context()` + fork trigger
+      + single-context fallback (6d) + `fork_enabled: bool = False` config
+- [ ] Phase A: `tests/test_forge_fork_phase_a.py` — 4 tests
+- [ ] Phase A: validate on 10+ real stories before Phase B
+- [ ] Phase B: `fork_exploration_max_iterations` + synthetic commit_plan
+- [ ] Phase B: `tests/test_forge_fork_phase_b.py` — 1 test
+- [ ] Phase C: `_compress_history()` in `_fork_context()` + `write_scratchpad`
+      with 2k token cap
+- [ ] Phase C: `tests/test_forge_fork_phase_c.py` — 2 tests
+- [ ] All tests pass, coverage ≥ 80%
+
+### PR Table (Phase 7)
+
+| Item | PR | Merged |
+| ---- | -- | ------ |
+| Item 19 (Planner Context Refresh) | #TBD | Planned |
+| Item 20 (Human-Gate Context Refresh) | #TBD | Planned |
+| Items 21+22+23 (FORGE Stage 1) | #TBD | Planned |
+| Item 24 (Haiku Compression) | #TBD | Planned |
+| Item 25 (Pre-seeded File Map) | #TBD | Planned |
+| Item 26 Phase A (Fork + commit_plan) | #TBD | Planned |
+| Item 26 Phase B (Exploration budget) | #TBD | Planned |
+| Item 26 Phase C (Scratchpad + summary) | #TBD | Planned |
+
+---
+
+*ROADMAP Execution Log v2.9 — 2026-03-20 IST*
+*Phase 7 planned: Items 19–26 (Context Intelligence & FORGE Efficiency)*
 *Author: Vipul Meehnia*
