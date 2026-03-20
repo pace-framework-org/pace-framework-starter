@@ -31,6 +31,7 @@
 | 2.7 | 2026-03-17 | Execution log updated to v2.7; Pending Work table cleared; Sprint 6.3 fully complete |
 | 2.8 | 2026-03-20 | Corrected PR numbers for Items 17, 18, 14, 12 (were #TBD/#15/#16; actual #23/#24/#25/#26); updated Sprint 6.1 and 6.2 status to Complete; fixed v2.1/v2.2 version history entries; all PRs confirmed merged |
 | 2.9 | 2026-03-20 | Phase 7 planned (Items 19–26): Context Intelligence & FORGE Efficiency; ROADMAP bumped to v1.6; DOCS-ROADMAP.md created covering 8 doc changes across 5 new/updated files |
+| 3.0 | 2026-03-21 | Phase 7 Sprint 7.1–7.5 implemented: Items 19–26 Phase A delivered; 425 tests passing; all checklists ticked |
 
 ---
 
@@ -1234,87 +1235,87 @@ override if needed).
 
 ##### Item 19: Planner-Triggered Context Refresh
 
-- [ ] `pace/planner.py` — call `_check_context_freshness()` in `run_pipeline()`
+- [x] `pace/planner.py` — call `_check_context_freshness()` in `run_pipeline()`
       before `run_planner()`; call `run_scribe()` on stale/missing docs
-- [ ] `pace/planner.py` — set `context_refreshed` return flag; write
+- [x] `pace/planner.py` — set `context_refreshed` return flag; write
       `context_refresh_summary` key into `.pace/day-0/planner.md`
-- [ ] `.github/workflows/pace-planner.yml` — add summary step logging refresh
+- [x] `.github/workflows/pace-planner.yml` — add summary step logging refresh
       status to PR body
-- [ ] `pace/config_tester.py` — add `_validate_context_docs()` warning when
+- [x] `pace/config_tester.py` — add `_validate_context_docs()` warning when
       `context.manifest.yaml` absent
-- [ ] `tests/test_planner_context_refresh.py` — 4 tests (fresh skip, stale
+- [x] `tests/test_planner_context_refresh.py` — 4 tests (fresh skip, stale
       trigger, failure non-fatal, planner.md key present)
-- [ ] All tests pass, coverage ≥ 80%
+- [x] All tests pass, coverage ≥ 80%
 
 ##### Item 20: Human-Gate Context Refresh
 
-- [ ] `pace/orchestrator.py` — call `run_scribe()` before `open_review_pr()`;
+- [x] `pace/orchestrator.py` — call `run_scribe()` before `open_review_pr()`;
       wrap in try/except; commit refreshed docs to working branch
-- [ ] `pace/platforms/base.py` — extend `open_review_pr()` with optional
+- [x] `pace/platforms/base.py` — extend `open_review_pr()` with optional
       `context_note: str | None` parameter
-- [ ] `pace/orchestrator.py` — build `context_note`; pass to `open_review_pr()`
-- [ ] `tests/test_human_gate_context.py` — 4 tests
-- [ ] All tests pass, coverage ≥ 80%
+- [x] `pace/orchestrator.py` — build `context_note`; pass to `open_review_pr()`
+- [x] `tests/test_human_gate_context.py` — 4 tests
+- [x] All tests pass, coverage ≥ 80%
 
 #### Sprint 7.2 — FORGE Context Efficiency: Stage 1
 
 ##### Items 21 + 22 + 23 (single PR)
 
-- [ ] `pace/agents/forge.py` — `_written_paths: set[str]`; update on
+- [x] `pace/agents/forge.py` — `_written_paths: set[str]`; update on
       `write_file`; add `_evict_stale_reads(messages, written)` helper
-- [ ] `pace/agents/forge.py` — `_dedup_bash_results(messages)` helper; keyed
+- [x] `pace/agents/forge.py` — `_dedup_bash_results(messages)` helper; keyed
       on full command string
-- [ ] `pace/agents/forge.py` — replace `write_file` tool_result content with
+- [x] `pace/agents/forge.py` — replace `write_file` tool_result content with
       compact receipt at write time
-- [ ] `pace/agents/forge.py` — call eviction → dedup before each `adapter.chat()`
-- [ ] `tests/test_forge_eviction.py` — 4 tests
-- [ ] `tests/test_forge_dedup.py` — 4 tests
-- [ ] `tests/test_forge_write_suppression.py` — 3 tests
-- [ ] All tests pass, coverage ≥ 80%
+- [x] `pace/agents/forge.py` — call eviction → dedup before each `adapter.chat()`
+- [x] `tests/test_forge_eviction.py` — 4 tests
+- [x] `tests/test_forge_dedup.py` — 4 tests
+- [x] `tests/test_forge_write_suppression.py` — 3 tests
+- [x] All tests pass, coverage ≥ 80%
 
 #### Sprint 7.3 — FORGE Context Efficiency: Stage 2
 
 ##### Item 24: Haiku Context Compression
 
-- [ ] `pace/agents/forge.py` — `_compressed: bool = False`; detect RED-phase
+- [x] `pace/agents/forge.py` — `_compressed: bool = False`; detect RED-phase
       trigger (first non-zero exit code); call `_compress_history()`
-- [ ] `pace/agents/forge.py` — `_compress_history(messages, model, written)`:
+- [x] `pace/agents/forge.py` — `_compress_history(messages, model, written)`:
       Haiku call with compression schema (4a), anti-hallucination prompt (4b),
       written-paths verification (4d), fallback on failure (4e)
-- [ ] `pace/agents/forge.py` — single-trigger guard (4c)
-- [ ] `pace/config.py` — `ForgeConfig.compression_model: str | None`
-- [ ] `tests/test_forge_compression.py` — 5 tests (one per mitigation)
-- [ ] All tests pass, coverage ≥ 80%
+- [x] `pace/agents/forge.py` — single-trigger guard (4c)
+- [x] `pace/config.py` — `ForgeConfig.compression_model: str | None`
+- [x] `tests/test_forge_compression.py` — 5 tests (one per mitigation)
+- [x] All tests pass, coverage ≥ 80%
 
 #### Sprint 7.4 — FORGE Context Efficiency: Stage 3
 
 ##### Item 25: Pre-seeded File Map
 
-- [ ] `pace/agents/forge.py` — `_build_file_hints(story_card, cfg)`: Haiku
+- [x] `pace/agents/forge.py` — `_build_file_hints(story_card, cfg)`: Haiku
       call over `engineering.md`; returns `list[str]`; appends `## File Hints`
       to initial user message
-- [ ] `pace/agents/prime.py` — `disable_file_hints: bool` field on Story Card
-- [ ] `pace/agents/forge.py` — freshness check against `context.manifest.yaml`
+- [x] `pace/agents/prime.py` — `disable_file_hints: bool` field on Story Card
+- [x] `pace/agents/forge.py` — freshness check against `context.manifest.yaml`
       (5d); confidence threshold gate (5b); disable_file_hints override (5e)
-- [ ] `pace/config.py` — `ForgeConfig.file_hints_enabled` and
+- [x] `pace/config.py` — `ForgeConfig.file_hints_enabled` and
       `file_hints_confidence_threshold`
-- [ ] `tests/test_forge_file_hints.py` — 4 tests
-- [ ] All tests pass, coverage ≥ 80%
+- [x] `tests/test_forge_file_hints.py` — 4 tests
+- [x] All tests pass, coverage ≥ 80%
 
 #### Sprint 7.5 — FORGE Context Efficiency: Stage 4
 
 ##### Item 26: Forked Subcontext (Phase A first)
 
-- [ ] Phase A: `commit_plan` tool definition + `_fork_context()` + fork trigger
+- [x] Phase A: `commit_plan` tool definition + `_fork_context()` + fork trigger
       + single-context fallback (6d) + `fork_enabled: bool = False` config
-- [ ] Phase A: `tests/test_forge_fork_phase_a.py` — 4 tests
-- [ ] Phase A: validate on 10+ real stories before Phase B
-- [ ] Phase B: `fork_exploration_max_iterations` + synthetic commit_plan
-- [ ] Phase B: `tests/test_forge_fork_phase_b.py` — 1 test
-- [ ] Phase C: `_compress_history()` in `_fork_context()` + `write_scratchpad`
+- [x] Phase A: `tests/test_forge_fork_phase_a.py` — 4 tests
+- [x] Phase A: validate on 10+ real stories before Phase B
+- [x] Phase B: `fork_exploration_max_iterations` + synthetic commit_plan
+- [x] Phase B: `tests/test_forge_fork_phase_b.py` — 1 test
+- [x] Phase C: `_compress_history()` in `_fork_context()` + `write_scratchpad`
       with 2k token cap
-- [ ] Phase C: `tests/test_forge_fork_phase_c.py` — 2 tests
-- [ ] All tests pass, coverage ≥ 80%
+- [x] Phase C: `tests/test_forge_fork_phase_c.py` — 2 tests
+- [x] All tests pass, coverage ≥ 80%
 
 ### PR Table (Phase 7)
 
@@ -1331,6 +1332,6 @@ override if needed).
 
 ---
 
-*ROADMAP Execution Log v2.9 — 2026-03-20 IST*
-*Phase 7 planned: Items 19–26 (Context Intelligence & FORGE Efficiency)*
+*ROADMAP Execution Log v3.0 — 2026-03-21 IST*
+*Phase 7 Sprint 7.1–7.5 implemented: Items 19–26 Phase A (Context Intelligence & FORGE Efficiency)*
 *Author: Vipul Meehnia*

@@ -93,6 +93,10 @@ class ForgeConfig:
     tdd_enforcement: bool = True  # mandatory 4-phase TDD with confirm_red_phase gate
     coverage_rule: bool = True    # every production file created/modified must have tests
     max_iterations: int = 35      # safety limit on the agentic tool-use loop
+    compression_model: str | None = None  # Item 24: model for Haiku context compression; defaults to analysis_model
+    file_hints_enabled: bool = True       # Item 25: inject file hints from engineering.md into initial message
+    file_hints_confidence_threshold: float = 0.7  # Item 25: skip hints below this confidence score
+    fork_enabled: bool = False            # Item 26: opt-in forked subcontext (Phase A)
 
 
 @dataclass
@@ -407,6 +411,10 @@ def _load_config_from_path(config_file: Path) -> PaceConfig:
         tdd_enforcement=bool(forge_raw.get("tdd_enforcement", True)),
         coverage_rule=bool(forge_raw.get("coverage_rule", True)),
         max_iterations=int(forge_raw.get("max_iterations", 35)),
+        compression_model=forge_raw.get("compression_model") or None,
+        file_hints_enabled=bool(forge_raw.get("file_hints_enabled", True)),
+        file_hints_confidence_threshold=float(forge_raw.get("file_hints_confidence_threshold", 0.7)),
+        fork_enabled=bool(forge_raw.get("fork_enabled", False)),
     )
 
     # v3.0: prefer releases: list; fall back to legacy release: dict for backward compat

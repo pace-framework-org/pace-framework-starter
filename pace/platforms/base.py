@@ -32,12 +32,15 @@ class CIAdapter(ABC):
     """
 
     @abstractmethod
-    def open_review_pr(self, day: int, pace_dir: Path) -> str:
+    def open_review_pr(self, day: int, pace_dir: Path, context_note: str = "") -> str:
         """Open a review PR or MR for a human gate day.
 
         Args:
-            day:      PACE day number (used for branch name and title).
-            pace_dir: Path to the .pace/ directory (for reading prior gate reports).
+            day:          PACE day number (used for branch name and title).
+            pace_dir:     Path to the .pace/ directory (for reading prior gate reports).
+            context_note: Optional summary of the SCRIBE context refresh that occurred
+                          before this PR was opened (Item 20). Shown in the PR body
+                          under a "## Context" section.
 
         Returns:
             URL of the opened PR/MR, or empty string if unsupported / failed.

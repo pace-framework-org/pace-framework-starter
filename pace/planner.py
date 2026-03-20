@@ -316,6 +316,46 @@ def _write_shipped_manifest(shipped_days: list[int]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Pipeline entrypoint — Item 19: context refresh helpers
+# ---------------------------------------------------------------------------
+
+def _run_context_refresh() -> dict:
+    """Check context freshness and invoke SCRIBE if docs are stale or missing.
+
+    Non-fatal: if SCRIBE fails, logs a warning and returns with scribe_error set.
+    Returns a summary dict that is written into .pace/day-0/planner.md.
+    """
+    sys.path.insert(0, str(Path(__file__).parent))
+    from preflight import _check_context_freshness, _missing_docs
+
+    summary: dict = {"docs_refreshed": [], "triggered_by": [], "scribe_error": None}
+
+    stale = _check_context_freshness()
+    missing = _missing_docs()
+
+    if not stale and not missing:
+        return summary
+
+    summary["triggered_by"] = stale + [f"missing:{d}" for d in missing]
+
+    try:
+        from agents.scribe import run_scribe
+        run_scribe()
+        context_dir = PACE_DIR / "context"
+        _known = {"engineering.md", "security.md", "devops.md", "product.md"}
+        if context_dir.exists():
+            summary["docs_refreshed"] = sorted(
+                f.name for f in context_dir.iterdir() if f.name in _known
+            )
+        print(f"[PACE][Planner] Context refreshed: {', '.join(summary['docs_refreshed'])}")
+    except Exception as exc:
+        summary["scribe_error"] = str(exc)
+        print(f"[PACE][Planner] Warning: SCRIBE failed during context refresh: {exc} — continuing.")
+
+    return summary
+
+
+# ---------------------------------------------------------------------------
 # Pipeline entrypoint
 # ---------------------------------------------------------------------------
 
@@ -323,7 +363,7 @@ def run_pipeline(plan: dict, model: str, force_replan: bool = False) -> None:
     """Pipeline mode: re-estimate remaining work, protect shipped days, pause cycle.
 
     Called by pace-planner.yml. After this function returns:
-      - .pace/day-0/planner.md   — updated cost estimates
+      - .pace/day-0/planner.md   — updated cost estimates (incl. context_refresh_summary)
       - .pace/shipped.yaml       — protected shipped-day manifest
       - PACE_PAUSED              — set to "true" (Actions variable)
 
@@ -334,11 +374,23 @@ def run_pipeline(plan: dict, model: str, force_replan: bool = False) -> None:
     sys.path.insert(0, str(Path(__file__).parent))
     from platforms import get_ci_adapter
 
+    context_refresh_summary = _run_context_refresh()
+
     shipped_days = _collect_shipped_days()
     _write_shipped_manifest(shipped_days)
 
     replan = force_replan or len(shipped_days) > 0
     report = run_planner(plan, model, replan=replan)
+
+    # Patch planner.md with context_refresh_summary so reviewers and CI can read it
+    planner_file = PACE_DIR / "day-0" / "planner.md"
+    if planner_file.exists():
+        try:
+            data = yaml.safe_load(planner_file.read_text()) or {}
+            data["context_refresh_summary"] = context_refresh_summary
+            planner_file.write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True))
+        except Exception:
+            pass  # best-effort; planner.md without summary is still valid
 
     # Pause the daily cycle so it waits for plan-approval PR to be merged
     ci = get_ci_adapter()
@@ -349,8 +401,11 @@ def run_pipeline(plan: dict, model: str, force_replan: bool = False) -> None:
         print("[PACE] Warning: could not set PACE_PAUSED (adapter unavailable). Set it manually.")
 
     total = report.get("total_estimated_usd", 0.0)
+    refreshed = context_refresh_summary.get("docs_refreshed", [])
+    refresh_note = f" Context docs refreshed: {', '.join(refreshed)}." if refreshed else ""
     print(
-        f"[PACE] Pipeline complete. "
+        f"[PACE] Pipeline complete."
+        f"{refresh_note} "
         f"Total re-estimated cost: ${total:.2f}. "
         f"Commit .pace/day-0/planner.md and .pace/shipped.yaml, then open the plan-approval PR."
     )

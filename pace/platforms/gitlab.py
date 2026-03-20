@@ -58,7 +58,7 @@ class GitLabCIAdapter(_GitLabBase, CIAdapter):
     # Review MR
     # ------------------------------------------------------------------
 
-    def open_review_pr(self, day: int, pace_dir: Path) -> str:
+    def open_review_pr(self, day: int, pace_dir: Path, context_note: str = "") -> str:
         if not self._available:
             print("[GitLab] Adapter not configured — skipping MR creation.")
             return ""
@@ -87,6 +87,7 @@ class GitLabCIAdapter(_GitLabBase, CIAdapter):
             if deferred_items
             else "None"
         )
+        context_section = f"\n## Context\n\n{context_note}\n" if context_note else ""
 
         body = f"""## Summary
 
@@ -95,7 +96,7 @@ class GitLabCIAdapter(_GitLabBase, CIAdapter):
 | Stories completed | {ship_count}/{total} |
 | SHIP rate | {ship_rate} |
 | Escalated HOLDs | {hold_count} |
-
+{context_section}
 ## Deferred Acceptance Criteria
 
 {deferred_section}

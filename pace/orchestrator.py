@@ -529,6 +529,36 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
     return False, hold_reason or "Unknown — retries exhausted"
 
 
+def _refresh_context_for_gate(day: int) -> str:
+    """Invoke SCRIBE before opening a human-gate review PR (Item 20).
+
+    Refreshes context docs so reviewers see an accurate codebase snapshot.
+    Non-fatal: if SCRIBE fails, logs a warning and returns an error note.
+
+    Returns:
+        A human-readable string suitable for the review PR's ## Context section.
+    """
+    print(f"[PACE] Human gate — refreshing context docs before review PR (Day {day})")
+    try:
+        from agents.scribe import run_scribe
+        run_scribe()
+        context_dir = PACE_DIR / "context"
+        _known = {"engineering.md", "security.md", "devops.md", "product.md"}
+        refreshed = sorted(
+            f.name for f in context_dir.iterdir() if f.name in _known
+        ) if context_dir.exists() else []
+        if refreshed:
+            note = f"Context documents refreshed by SCRIBE: {', '.join(refreshed)}"
+        else:
+            note = "SCRIBE ran but no context documents were found in .pace/context/"
+        print(f"[PACE][Gate] {note}")
+        return note
+    except Exception as exc:
+        msg = f"Context refresh failed (non-fatal): {exc}"
+        print(f"[PACE][Gate] Warning: {msg} — proceeding to open review PR.")
+        return msg
+
+
 def _run_day_zero(plan: dict, replan: bool = False) -> None:
     """Day 0 planning phase — estimate sprint cost and pre-populate PROGRESS.md.
 
@@ -659,10 +689,11 @@ def main() -> None:
         print(f"[PACE] Day {day}: Preflight failed — {exc}")
         sys.exit(1)
 
-    # Human gate day: open PR/MR and stop
+    # Human gate day: refresh context docs then open PR/MR and stop
     if day_plan.get("human_gate"):
-        print(f"[PACE] Day {day}: Human review gate. Opening PR/MR...")
-        ci.open_review_pr(day, PACE_DIR)
+        print(f"[PACE] Day {day}: Human review gate. Refreshing context docs before opening PR/MR...")
+        context_note = _refresh_context_for_gate(day)
+        ci.open_review_pr(day, PACE_DIR, context_note=context_note)
         print("[PACE] Review gate opened. Loop will pause until human approval.")
         sys.exit(0)
 
