@@ -2,7 +2,7 @@
 
 ![PACE Framework](https://raw.githubusercontent.com/pace-framework-org/pace-docs/main/src/assets/pace-logo-square.svg)
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Python](https://img.shields.io/badge/python-3.12+-blue) ![License](https://img.shields.io/badge/license-Apache%202.0-green)
+![Version](https://img.shields.io/badge/version-3.1.0-blue) ![Python](https://img.shields.io/badge/python-3.12+-blue) ![License](https://img.shields.io/badge/license-Apache%202.0-green)
 
 **PACE** (Plan, Architect, Code, Evaluate) is an AI-native daily delivery framework that runs a structured pipeline of Claude-powered agents to implement, validate, and review software — one story per day, every day.
 
@@ -351,6 +351,42 @@ Each agent's system prompt is built dynamically from `pace.config.yaml`. To chan
 - **SENTINEL**: Add project-specific security requirements to the system prompt
 - **CONDUIT**: Extend the DevOps checklist for your deployment targets
 - **SCRIBE**: The `DOC_MAPPING` in `agents/scribe.py` guides what to look for in each doc segment
+
+---
+
+## What's New
+
+### v3.1.0 — Context Intelligence & FORGE Efficiency (2026-03-21)
+
+#### Context auto-refresh (Items 19–20)
+
+- Planner CI now runs SCRIBE before generating the plan-approval PR if context docs are stale or missing — reviewers see a fresh `engineering.md` diff alongside cost estimates.
+- Human-gate review PRs include a `## Context` section listing which context docs were refreshed and their source files, giving reviewers an accurate codebase snapshot at the gate point.
+
+#### FORGE Stage-1 context eviction (Items 21–23)
+
+- Stale file-read results for paths that have since been written are evicted from the message history before each LLM call.
+- Repeated `run_bash` results for the same command signature are deduplicated — only the most recent output is kept.
+- `write_file` tool results are replaced with compact receipts (`OK: wrote N bytes to path`) instead of echoing full file content.
+- Expected token savings: ~60–65% reduction in FORGE input-token growth vs baseline. No configuration required.
+
+#### Haiku context compression (Item 24)
+
+- After the first confirmed RED-phase test failure, FORGE compresses its full message history into a structured YAML summary using a lightweight model.
+- New config key: `forge.compression_model` (defaults to `llm.analysis_model`).
+- Five-mitigation design: schema validation, anti-hallucination override, single-trigger guard, required-field verification, and fallback to original history on any failure.
+
+#### Pre-seeded file hints (Item 25)
+
+- Before FORGE starts exploration, a Haiku pre-pass over `engineering.md` identifies the most likely files for the story and injects them as a `## File Hints` section in FORGE's initial message.
+- New config keys: `forge.file_hints_enabled` (default `true`), `forge.file_hints_confidence_threshold` (default `0.7`).
+- Per-story override: `disable_file_hints: true` in `plan.yaml` for architectural stories that should explore broadly.
+
+#### Forked FORGE subcontext — Phase A (Item 26)
+
+- Adds the `commit_plan` tool to FORGE's tool list (opt-in via `forge.fork_enabled: true`).
+- When called, FORGE commits its exploration summary and implementation plan, and `_fork_context()` constructs a compact fresh context for the implementation phase — separating exploration and implementation into independent API contexts.
+- Phase B (live dual-context) and Phase C (adaptive triggering) will follow after validation on production stories.
 
 ---
 
