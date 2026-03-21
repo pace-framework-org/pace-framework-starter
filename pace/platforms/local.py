@@ -33,7 +33,7 @@ class LocalCIAdapter(CIAdapter):
     # Review PR (written to a local file)
     # ------------------------------------------------------------------
 
-    def open_review_pr(self, day: int, pace_dir: Path) -> str:
+    def open_review_pr(self, day: int, pace_dir: Path, context_note: str = "") -> str:
         start_day = 1
         for candidate_start in [15, 29]:
             if day >= candidate_start:
@@ -58,6 +58,7 @@ class LocalCIAdapter(CIAdapter):
             if deferred_items
             else "None"
         )
+        context_section = f"\n## Context\n\n{context_note}\n" if context_note else ""
 
         body = f"""# PACE Review Gate — {period}
 
@@ -68,7 +69,7 @@ class LocalCIAdapter(CIAdapter):
 | Stories completed | {ship_count}/{total} |
 | SHIP rate | {ship_rate} |
 | Escalated HOLDs | {hold_count} |
-
+{context_section}
 ## Deferred Acceptance Criteria
 
 {deferred_section}

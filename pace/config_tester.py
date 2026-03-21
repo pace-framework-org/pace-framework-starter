@@ -695,6 +695,23 @@ def _validate_context_manifest(r: ConfigTestResult) -> None:
         )
 
 
+def _validate_context_docs(r: ConfigTestResult) -> None:
+    """Warn if context.manifest.yaml is absent — meaning SCRIBE has never run for this release.
+
+    Distinct from _validate_context_manifest (which checks file-vs-manifest consistency).
+    This check fires when the entire context generation step has been skipped.
+    """
+    context_dir = Path(__file__).parent.parent / ".pace" / "context"
+    manifest_path = context_dir / "context.manifest.yaml"
+    if not manifest_path.exists():
+        r.warn(
+            ".pace/context/context.manifest.yaml not found — SCRIBE has not been run for this "
+            "release. Context documents (engineering.md, security.md, devops.md, product.md) "
+            "may be absent or stale. Run `python pace/orchestrator.py --refresh-context` or "
+            "trigger the planner pipeline to generate them."
+        )
+
+
 _PLAN_FILE = Path(__file__).parent.parent / "plan.yaml"
 _REPO_ROOT = Path(__file__).parent.parent
 
@@ -835,6 +852,7 @@ def run_config_test(
     _validate_reporter(raw, r)
     _validate_training(raw, r)
     _validate_context_manifest(r)
+    _validate_context_docs(r)
     _validate_plan(r)
     _validate_plan_files(raw, r, release_filter=release_filter)
 

@@ -62,7 +62,7 @@ class JenkinsCIAdapter(CIAdapter):
     # Review PR — not natively supported; writes a local file
     # ------------------------------------------------------------------
 
-    def open_review_pr(self, day: int, pace_dir: Path) -> str:
+    def open_review_pr(self, day: int, pace_dir: Path, context_note: str = "") -> str:
         print(
             f"[Jenkins] PR/MR not supported in Jenkins mode. "
             f"Writing review gate to local file instead."
@@ -91,6 +91,7 @@ class JenkinsCIAdapter(CIAdapter):
             if deferred_items
             else "None"
         )
+        context_section = f"\n## Context\n\n{context_note}\n" if context_note else ""
 
         body = f"""# PACE Review Gate — {period} (Jenkins)
 
@@ -101,7 +102,7 @@ class JenkinsCIAdapter(CIAdapter):
 | Stories completed | {ship_count}/{total} |
 | SHIP rate | {ship_rate} |
 | Escalated HOLDs | {hold_count} |
-
+{context_section}
 ## Deferred Acceptance Criteria
 
 {deferred_section}
