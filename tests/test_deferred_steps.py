@@ -565,7 +565,7 @@ def test_anthropic_adapter_complete_retries_on_context_length():
 
     call_count = [0]
 
-    def _fake_create(**kwargs):
+    def _fake_stream(**kwargs):
         call_count[0] += 1
         if call_count[0] == 1:
             raise anthropic.BadRequestError(
@@ -573,20 +573,25 @@ def test_anthropic_adapter_complete_retries_on_context_length():
                 response=MagicMock(status_code=400),
                 body={"error": {"type": "invalid_request_error", "message": "prompt is too long"}},
             )
-        # Second call succeeds
-        resp = MagicMock()
-        resp.model = "claude-sonnet-4-6"
-        resp.usage.input_tokens = 100
-        resp.usage.output_tokens = 50
-        resp.content = [MagicMock(text="ok response")]
-        return resp
+        # Second call succeeds — return a context-manager mock
+        final = MagicMock()
+        final.model = "claude-sonnet-4-6"
+        final.usage.input_tokens = 100
+        final.usage.output_tokens = 50
+        final.content = [MagicMock(text="ok response")]
+        stream_cm = MagicMock()
+        stream_cm.__enter__ = MagicMock(return_value=stream_cm)
+        stream_cm.__exit__ = MagicMock(return_value=False)
+        stream_cm.text_stream = []
+        stream_cm.get_final_message.return_value = final
+        return stream_cm
 
     adapter = AnthropicAdapter.__new__(AnthropicAdapter)
     adapter._model = "claude-sonnet-4-6"
     adapter._client = MagicMock()
-    adapter._client.messages.create.side_effect = _fake_create
+    adapter._client.messages.stream.side_effect = _fake_stream
 
-    with patch("llm.anthropic_adapter.spend_tracker") as mock_tracker:
+    with patch("llm.anthropic_adapter.spend_tracker"):
         result = adapter.complete("system", "user " * 500, max_tokens=256)
 
     assert result == "ok response"
@@ -598,7 +603,7 @@ def test_anthropic_adapter_complete_does_not_retry_other_errors():
     import anthropic
     from llm.anthropic_adapter import AnthropicAdapter
 
-    def _fake_create(**kwargs):
+    def _fake_stream(**kwargs):
         raise anthropic.BadRequestError(
             message="invalid model",
             response=MagicMock(status_code=400),
@@ -608,7 +613,7 @@ def test_anthropic_adapter_complete_does_not_retry_other_errors():
     adapter = AnthropicAdapter.__new__(AnthropicAdapter)
     adapter._model = "claude-sonnet-4-6"
     adapter._client = MagicMock()
-    adapter._client.messages.create.side_effect = _fake_create
+    adapter._client.messages.stream.side_effect = _fake_stream
 
     with pytest.raises(anthropic.BadRequestError):
         adapter.complete("system", "user")
