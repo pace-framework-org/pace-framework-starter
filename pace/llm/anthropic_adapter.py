@@ -49,19 +49,34 @@ class AnthropicAdapter(LLMAdapter):
     def complete(self, system: str, user: str, max_tokens: int = 4096) -> str:
         """Single-turn completion with one retry on context-length errors.
 
+        The system prompt is wrapped in cache_control: ephemeral so that the
+        PLANNER (which calls complete() N times with the same system prompt)
+        saves ~90% on system-prompt tokens for calls 2+.
+
         Item 3 deferred step 6: when the Anthropic API rejects the request
         because the prompt exceeds the context window, compact the user
         message to ~60 % of its original length and retry once.
         """
+        system_param: list = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
         try:
-            response = self._client.messages.create(
+            with self._client.messages.stream(
                 model=self._model,
                 max_tokens=max_tokens,
-                system=system,
+                system=system_param,
                 messages=[{"role": "user", "content": user}],
+            ) as stream:
+                for chunk in stream.text_stream:
+                    print(chunk, end="", flush=True)
+                print()
+                final = stream.get_final_message()
+            spend_tracker.record(
+                final.model,
+                final.usage.input_tokens,
+                final.usage.output_tokens,
+                cache_read=getattr(final.usage, "cache_read_input_tokens", 0) or 0,
+                cache_create=getattr(final.usage, "cache_creation_input_tokens", 0) or 0,
             )
-            spend_tracker.record(response.model, response.usage.input_tokens, response.usage.output_tokens)
-            return response.content[0].text
+            return final.content[0].text
         except anthropic.BadRequestError as exc:
             err_str = str(exc).lower()
             if "prompt is too long" in err_str or "context_length" in err_str or "too many tokens" in err_str:
@@ -70,14 +85,24 @@ class AnthropicAdapter(LLMAdapter):
                     f"[PACE][LLM] Token limit hit — retrying with compacted input "
                     f"({len(user)} → {len(compact_user)} chars)"
                 )
-                response = self._client.messages.create(
+                with self._client.messages.stream(
                     model=self._model,
                     max_tokens=max_tokens,
-                    system=system,
+                    system=system_param,
                     messages=[{"role": "user", "content": compact_user}],
+                ) as stream:
+                    for chunk in stream.text_stream:
+                        print(chunk, end="", flush=True)
+                    print()
+                    final = stream.get_final_message()
+                spend_tracker.record(
+                    final.model,
+                    final.usage.input_tokens,
+                    final.usage.output_tokens,
+                    cache_read=getattr(final.usage, "cache_read_input_tokens", 0) or 0,
+                    cache_create=getattr(final.usage, "cache_creation_input_tokens", 0) or 0,
                 )
-                spend_tracker.record(response.model, response.usage.input_tokens, response.usage.output_tokens)
-                return response.content[0].text
+                return final.content[0].text
             raise
 
     # ------------------------------------------------------------------
@@ -94,7 +119,7 @@ class AnthropicAdapter(LLMAdapter):
         # Wrap the system prompt in Anthropic's prompt-caching format. The system
         # prompt is identical on every iteration of the agentic loop, so caching
         # its KV state reduces repeated input-token cost by ~90% for iterations 2+.
-        system_param: str | list = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+        system_param: list = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
         kwargs: dict = dict(
             model=self._model,
             max_tokens=max_tokens,
@@ -104,13 +129,24 @@ class AnthropicAdapter(LLMAdapter):
         if tools:
             kwargs["tools"] = tools
 
-        response = self._client.messages.create(**kwargs)
-        spend_tracker.record(response.model, response.usage.input_tokens, response.usage.output_tokens)
+        with self._client.messages.stream(**kwargs) as stream:
+            for chunk in stream.text_stream:
+                print(chunk, end="", flush=True)
+            print()
+            final = stream.get_final_message()
+
+        spend_tracker.record(
+            final.model,
+            final.usage.input_tokens,
+            final.usage.output_tokens,
+            cache_read=getattr(final.usage, "cache_read_input_tokens", 0) or 0,
+            cache_create=getattr(final.usage, "cache_creation_input_tokens", 0) or 0,
+        )
 
         text: str | None = None
         tool_calls: list[ToolCall] = []
 
-        for block in response.content:
+        for block in final.content:
             if block.type == "text":
                 text = block.text
             elif block.type == "tool_use":
@@ -121,7 +157,7 @@ class AnthropicAdapter(LLMAdapter):
                 ))
 
         return ChatResponse(
-            stop_reason=response.stop_reason or ("tool_use" if tool_calls else "end_turn"),
+            stop_reason=final.stop_reason or ("tool_use" if tool_calls else "end_turn"),
             text=text,
             tool_calls=tool_calls,
         )
