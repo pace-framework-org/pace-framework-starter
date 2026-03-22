@@ -174,10 +174,27 @@ Recent gate reports for context:
 
 Produce the Story Card YAML for Day {day}."""
 
-    raw = adapter.complete(system_prompt, user_message, max_tokens=2048).strip()
-    story_card = yaml.safe_load(_clean_yaml(raw))
-    story_card["day"] = day
-    story_card["agent"] = "PRIME"
+    last_error: Exception | None = None
+    for attempt in range(3):
+        retry_note = (
+            f"\n\nPrevious attempt failed validation: {last_error}. "
+            "Ensure 'acceptance' is a non-empty YAML list with at least one item."
+            if last_error else ""
+        )
+        raw = adapter.complete(system_prompt, user_message + retry_note, max_tokens=2048).strip()
+        story_card = yaml.safe_load(_clean_yaml(raw))
+        if not isinstance(story_card, dict):
+            last_error = ValueError(f"Expected dict, got {type(story_card).__name__}")
+            continue
+        story_card["day"] = day
+        story_card["agent"] = "PRIME"
+        # Coerce None acceptance to empty list so schema gives a clear minItems error
+        if story_card.get("acceptance") is None:
+            story_card["acceptance"] = []
+        try:
+            jsonschema.validate(story_card, STORY_CARD_SCHEMA)
+            return story_card
+        except jsonschema.ValidationError as exc:
+            last_error = exc
 
-    jsonschema.validate(story_card, STORY_CARD_SCHEMA)
-    return story_card
+    raise last_error
