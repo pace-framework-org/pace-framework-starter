@@ -58,8 +58,24 @@ import spend_tracker
 spend_tracker.install()
 
 REPO_ROOT = Path(__file__).parent.parent
-PACE_DIR = REPO_ROOT / ".pace"
 PLAN_FILE = Path(__file__).parent / "plan.yaml"
+
+# Sprint-scoped artifact directory — prevents day-N folders from being
+# overwritten when a new sprint restarts the day counter from 1.
+# If plan.yaml defines `sprint: N`, artifacts go in .pace/sprint-N/day-N/.
+# Falls back to .pace/ for backwards compatibility with sprint 1 (no sprint field).
+def _resolve_pace_dir() -> Path:
+    try:
+        with open(PLAN_FILE) as f:
+            plan = yaml.safe_load(f)
+        sprint = plan.get("sprint")
+        if sprint:
+            return REPO_ROOT / ".pace" / f"sprint-{sprint}"
+    except Exception:
+        pass
+    return REPO_ROOT / ".pace"
+
+PACE_DIR = _resolve_pace_dir()
 PROGRESS_FILE = REPO_ROOT / "PROGRESS.md"
 MAX_RETRIES = 1
 
@@ -193,19 +209,10 @@ def get_current_day() -> int:
 
 
 def get_day_plan(plan: dict, day: int) -> dict:
-    # New plan.yaml: stories list with id: story-N
-    for s in plan.get("stories", []):
-        if s.get("id") == f"story-{day}":
-            # Provide 'target' alias for 'title' so the rest of the orchestrator
-            # can use entry.get("target") regardless of plan format.
-            if "title" in s and "target" not in s:
-                return {**s, "target": s["title"]}
-            return s
-    # Legacy: days list with day: N
-    for d in plan.get("days", []):
+    for d in plan["days"]:
         if d["day"] == day:
             return d
-    raise ValueError(f"Day {day} not found in plan.yaml — add a story-{day} entry and retry.")
+    raise ValueError(f"Day {day} not found in plan.yaml — add the day entry and retry.")
 
 
 def get_recent_gate_reports(day: int, count: int = 3) -> list[str]:
@@ -219,11 +226,41 @@ def get_recent_gate_reports(day: int, count: int = 3) -> list[str]:
 
 def commit_artifact(path: Path, message: str) -> None:
     subprocess.run(
-        f'git add {shlex.quote(str(path))} && git commit -m {shlex.quote(message)} --allow-empty && (git stash -u || true) && git pull --rebase && (git stash pop || true) && git push origin HEAD',
+        f'git add {shlex.quote(str(path))} && git commit -m {shlex.quote(message)} --allow-empty && (git stash -u || true) && git pull --rebase --autostash && (git stash pop || true) && git push origin HEAD',
         shell=True,
         cwd=str(REPO_ROOT),
         check=False,
     )
+
+
+def _setup_story_branch(branch: str) -> None:
+    """Create and checkout a story branch from the sprint branch.
+
+    Branch hierarchy: main → pace/release-{name} → pace/sprint-{N} → pace/story-{issue}
+    Story branches are always forked from pace/sprint-{N} (the current PACE_BRANCH).
+    Pushes to origin with -u to establish tracking so commit_artifact's
+    git pull --rebase has a tracking branch on first use.
+    On retry runs the branch already exists on origin — fetch and check it out.
+    """
+    result = subprocess.run(
+        f'git ls-remote --heads origin {shlex.quote(branch)}',
+        shell=True, cwd=str(REPO_ROOT), capture_output=True, text=True,
+    )
+    branch_exists_on_origin = bool(result.stdout.strip())
+
+    if branch_exists_on_origin:
+        subprocess.run(
+            f'git fetch origin {shlex.quote(branch)} && git checkout {shlex.quote(branch)}',
+            shell=True, cwd=str(REPO_ROOT), check=False,
+        )
+        print(f"[PACE] Checked out existing story branch: {branch}")
+    else:
+        # Fork from current HEAD (which is the sprint branch checked out by CI).
+        subprocess.run(
+            f'git checkout -b {shlex.quote(branch)} && git push -u origin {shlex.quote(branch)}',
+            shell=True, cwd=str(REPO_ROOT), check=False,
+        )
+        print(f"[PACE] Created story branch from sprint HEAD: {branch}")
 
 
 def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, tracker: TrackerAdapter, registry: PluginRegistry | None = None) -> tuple[bool, str]:
@@ -504,14 +541,6 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
                 print(f"[PACE] Day {day}: Clearance day FAILED — {len(remaining)} advisory item(s) still open.")
                 return False, "Clearance day: advisory items still open after all agents ran"
 
-        # Item 1 step 5: open staging PR (sprint → release) after CONDUIT SHIP + passing CI
-        _try_open_staging_pr(
-            day,
-            story_card.get("story", ""),
-            commit_sha,
-            ci_result,
-        )
-
         # All checks passed — write cycle cost artifact and SHIP
         cycle_cost_usd = round(spend_tracker.total_usd() - _cycle_cost_before, 4)
         cycle_file = day_dir / "cycle.md"
@@ -527,36 +556,6 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
         return True, ""
 
     return False, hold_reason or "Unknown — retries exhausted"
-
-
-def _refresh_context_for_gate(day: int) -> str:
-    """Invoke SCRIBE before opening a human-gate review PR (Item 20).
-
-    Refreshes context docs so reviewers see an accurate codebase snapshot.
-    Non-fatal: if SCRIBE fails, logs a warning and returns an error note.
-
-    Returns:
-        A human-readable string suitable for the review PR's ## Context section.
-    """
-    print(f"[PACE] Human gate — refreshing context docs before review PR (Day {day})")
-    try:
-        from agents.scribe import run_scribe
-        run_scribe()
-        context_dir = PACE_DIR / "context"
-        _known = {"engineering.md", "security.md", "devops.md", "product.md"}
-        refreshed = sorted(
-            f.name for f in context_dir.iterdir() if f.name in _known
-        ) if context_dir.exists() else []
-        if refreshed:
-            note = f"Context documents refreshed by SCRIBE: {', '.join(refreshed)}"
-        else:
-            note = "SCRIBE ran but no context documents were found in .pace/context/"
-        print(f"[PACE][Gate] {note}")
-        return note
-    except Exception as exc:
-        msg = f"Context refresh failed (non-fatal): {exc}"
-        print(f"[PACE][Gate] Warning: {msg} — proceeding to open review PR.")
-        return msg
 
 
 def _run_day_zero(plan: dict, replan: bool = False) -> None:
@@ -664,7 +663,23 @@ def main() -> None:
 
     _plugin_registry.fire_hook("pipeline_start", {"day": day})
 
-    if cfg_main.release:
+    # Ensure branch hierarchy: main → pace/release-{name} → pace/sprint-{N}
+    # Sprint number and release name come from plan.yaml (authoritative).
+    _plan_sprint_num = plan.get("sprint")
+    _plan_release_name = (load_config().sprint or {}).get("release_name") if hasattr(load_config(), "sprint") else None
+    # Fallback: read directly from pace.config.yaml sprint section
+    if not _plan_release_name:
+        try:
+            import yaml as _y
+            _cfg_raw = _y.safe_load((Path(__file__).parent / "pace.config.yaml").read_text())
+            _plan_release_name = (_cfg_raw.get("sprint") or {}).get("release_name")
+        except Exception:
+            pass
+    if _plan_sprint_num and _plan_release_name:
+        from branching import get_branching_adapter
+        print(f"[PACE] Ensuring branch hierarchy (release={_plan_release_name}, sprint={_plan_sprint_num})...")
+        get_branching_adapter().ensure_hierarchy(_plan_release_name, _plan_sprint_num)
+    elif cfg_main.release:
         from branching import get_branching_adapter, current_sprint_num
         sprint_num = current_sprint_num(day, cfg_main.release.sprint_days)
         print(f"[PACE] Ensuring branch hierarchy (release={cfg_main.release.name}, sprint={sprint_num})...")
@@ -689,13 +704,17 @@ def main() -> None:
         print(f"[PACE] Day {day}: Preflight failed — {exc}")
         sys.exit(1)
 
-    # Human gate day: refresh context docs then open PR/MR and stop
+    # Human gate day: open PR/MR and stop
     if day_plan.get("human_gate"):
-        print(f"[PACE] Day {day}: Human review gate. Refreshing context docs before opening PR/MR...")
-        context_note = _refresh_context_for_gate(day)
-        ci.open_review_pr(day, PACE_DIR, context_note=context_note)
+        print(f"[PACE] Day {day}: Human review gate. Opening PR/MR...")
+        ci.open_review_pr(day, PACE_DIR)
         print("[PACE] Review gate opened. Loop will pause until human approval.")
         sys.exit(0)
+
+    # Per-story branch — create and checkout before FORGE so commits land on the right branch.
+    story_branch = day_plan.get("story_branch")
+    if story_branch:
+        _setup_story_branch(story_branch)
 
     recent_gates = get_recent_gate_reports(day)
     _plugin_registry.fire_hook("day_start", {"day": day, "target": day_plan.get("target", "")})
@@ -737,60 +756,16 @@ def main() -> None:
         tracker.post_handoff_comment(day, day_dir)
     except Exception as exc:
         print(f"[PACE] Day {day}: Tracker SHIP updates failed (non-fatal): {exc}")
+
+    # Per-story PR: open a PR from story_branch → main with "Closes #NNN".
+    # The issue auto-closes when the PR is merged.
+    if day_plan.get("story_branch") and day_plan.get("issue"):
+        try:
+            ci.open_story_pr(day, day_plan, day_dir)
+        except Exception as exc:
+            print(f"[PACE] Day {day}: open_story_pr failed (non-fatal): {exc}")
+
     sys.exit(0)
-
-
-def _try_open_staging_pr(
-    day: int,
-    story: str,
-    commit_sha: str,
-    ci_result: dict | None,
-) -> None:
-    """Open a PR from the current sprint branch → release branch after CONDUIT SHIP.
-
-    Only runs when release branching is configured and CI passed (or was not run).
-    Non-fatal — a failure here must never block the SHIP outcome.
-
-    Item 1 deferred step 5: CONDUIT staging CI gate → release PR flow.
-    """
-    if not commit_sha:
-        return
-    if ci_result and ci_result.get("conclusion") not in ("success", "no_runs"):
-        return  # Only open PR when CI passed or was not configured
-
-    try:
-        cfg = load_config()
-        active = cfg.active_release
-        if not active:
-            return  # Release branching not configured — skip
-
-        # Resolve the current HEAD branch name
-        result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, cwd=str(REPO_ROOT), timeout=10,
-        )
-        if result.returncode != 0:
-            return
-        head_branch = result.stdout.strip()
-
-        base_branch = f"release/{active.name}"
-        ci_conclusion = ci_result.get("conclusion", "not run") if ci_result else "not run"
-
-        from branching import get_branching_adapter
-        get_branching_adapter().create_pull_request(
-            head=head_branch,
-            base=base_branch,
-            title=f"[PACE Day {day}] {story[:60]}",
-            body=(
-                f"**Story:** {story}\n\n"
-                f"**CI:** {ci_conclusion}\n\n"
-                f"*Auto-opened by CONDUIT after SHIP — Day {day}.*\n"
-                f"Review and merge to incorporate this story into `{base_branch}`."
-            ),
-            labels=["pace-story", f"pace-story-{day}"],
-        )
-    except Exception as exc:
-        print(f"[PACE] Day {day}: staging PR creation skipped (non-fatal): {exc}")
 
 
 def _load_story(day_dir: Path) -> dict | None:
