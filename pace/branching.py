@@ -1,11 +1,11 @@
-"""PACE Branching Adapter — release/sprint/story branch hierarchy management.
+"""PACE Branching Adapter — release/sprint branch hierarchy management.
 
-Creates and validates the branch hierarchy before each PACE run:
+Creates and validates the v2.0 branch hierarchy before each PACE run:
 
     main
-    └── pace/release-{release-name}     # e.g. pace/release-v1.0.0
-        └── pace/sprint-{N}             # e.g. pace/sprint-3
-            └── pace/story-{issue}      # e.g. pace/story-32
+    └── staging
+        └── release/<release-name>      # e.g. release/v2.0
+            └── rel/sprint/pace-N       # e.g. rel/sprint/pace-1
 
 All create_branch calls are idempotent — existing branches are left unchanged.
 Only missing levels are created. The adapter is safe to call on every pipeline
@@ -14,7 +14,7 @@ run without risk of overwriting existing work.
 Usage:
     from branching import get_branching_adapter
     adapter = get_branching_adapter()
-    adapter.ensure_hierarchy("v1.0.0", sprint_num=3)
+    adapter.ensure_hierarchy("v2.0", sprint_num=1)
 """
 
 from __future__ import annotations
@@ -23,25 +23,21 @@ import os
 from abc import ABC, abstractmethod
 
 BRANCH_MAIN = "main"
+BRANCH_STAGING = "staging"
 
 
 # ---------------------------------------------------------------------------
 # Branch name helpers
 # ---------------------------------------------------------------------------
 
-def release_branch(release_name: str) -> str:
-    """Return the canonical release branch name: pace/release-{name}."""
-    return f"pace/release-{release_name}"
-
-
 def sprint_branch(sprint_num: int) -> str:
-    """Return the canonical sprint branch name: pace/sprint-{N}."""
-    return f"pace/sprint-{sprint_num}"
+    """Return the canonical sprint branch name for sprint N."""
+    return f"rel/sprint/pace-{sprint_num}"
 
 
-def story_branch(issue_number: int) -> str:
-    """Return the canonical story branch name: pace/story-{issue}."""
-    return f"pace/story-{issue_number}"
+def release_branch(release_name: str) -> str:
+    """Return the canonical release branch name for a release."""
+    return f"release/{release_name}"
 
 
 def current_sprint_num(day: int, sprint_days: int) -> int:
@@ -83,26 +79,33 @@ class BranchingAdapter(ABC):
         """Idempotently create the full branch hierarchy for a release/sprint.
 
         Creates in order:
-            pace/release-{name}   ← main
-            pace/sprint-{N}       ← pace/release-{name}
+            staging      ← main
+            release/...  ← staging
+            rel/sprint/pace-N ← release/...
 
         Any level that already exists is skipped. Missing levels are created
-        from their parent. Story branches (pace/story-{issue}) are created
-        on-demand by _setup_story_branch() in orchestrator.py.
+        from their parent.
         """
         if not self.get_branch_sha(BRANCH_MAIN):
             print("[Branching] Cannot resolve 'main' branch SHA — skipping hierarchy.")
             return
 
-        # pace/release-{name} ← main
+        # staging ← main
+        if not self.get_branch_sha(BRANCH_STAGING):
+            print(f"[Branching] Creating '{BRANCH_STAGING}' from '{BRANCH_MAIN}'")
+            self.create_branch(BRANCH_STAGING, BRANCH_MAIN)
+        else:
+            print(f"[Branching] '{BRANCH_STAGING}' already exists — skipping")
+
+        # release/<name> ← staging
         rel = release_branch(release_name)
         if not self.get_branch_sha(rel):
-            print(f"[Branching] Creating '{rel}' from '{BRANCH_MAIN}'")
-            self.create_branch(rel, BRANCH_MAIN)
+            print(f"[Branching] Creating '{rel}' from '{BRANCH_STAGING}'")
+            self.create_branch(rel, BRANCH_STAGING)
         else:
             print(f"[Branching] '{rel}' already exists — skipping")
 
-        # pace/sprint-{N} ← pace/release-{name}
+        # rel/sprint/pace-N ← release/<name>
         sprint = sprint_branch(sprint_num)
         if not self.get_branch_sha(sprint):
             print(f"[Branching] Creating '{sprint}' from '{rel}'")
@@ -112,7 +115,7 @@ class BranchingAdapter(ABC):
 
         print(
             f"[Branching] Hierarchy ready: "
-            f"{BRANCH_MAIN} → {rel} → {sprint}"
+            f"{BRANCH_MAIN} → {BRANCH_STAGING} → {rel} → {sprint}"
         )
 
 
