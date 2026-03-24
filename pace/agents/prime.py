@@ -93,23 +93,7 @@ Split into today's story (≤{max_ac} AC) and deferred criteria for next day."""
     return today_card, deferred
 
 
-def run_prime(
-    day: int,
-    target: str,
-    recent_gates: list[str],
-    plan_diff: str | None = None,
-) -> dict:
-    """Generate a Story Card for the given day.
-
-    Args:
-        day:          Current sprint day number.
-        target:       Story target text from plan.yaml.
-        recent_gates: Up to 3 most recent GATE report strings for context.
-        plan_diff:    Optional structured re-plan diff (YAML string) provided
-                      when PACE_REPLAN=true. When present, PRIME uses it to
-                      understand what changed in the sprint plan so the new
-                      story card reflects the updated scope correctly.
-    """
+def run_prime(day: int, target: str, recent_gates: list[str]) -> dict:
     cfg = load_config()
     adapter = get_analysis_adapter()
 
@@ -160,15 +144,9 @@ Rules:
         if deferred_ctx else ""
     )
 
-    plan_diff_section = (
-        f"\nSprint Re-plan Diff (scope changes since original plan — adjust story accordingly):\n"
-        f"```yaml\n{plan_diff}\n```\n"
-        if plan_diff else ""
-    )
-
     user_message = f"""Day: {day}
 Today's story target from the plan: {target}
-{plan_diff_section}{deferred_section}{product_section}
+{deferred_section}{product_section}
 Recent gate reports for context:
 {gates_context}
 
