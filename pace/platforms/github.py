@@ -478,6 +478,20 @@ PACE could not resolve this HOLD after 2 retries. Human intervention required.
         except Exception as e:
             print(f"[GitHub] update_story_status failed: {e}")
 
+    def close_plan_issue(self, issue_number: int) -> None:
+        if not self._available or not issue_number:
+            return
+        try:
+            _requests.patch(
+                self._api(f"issues/{issue_number}"),
+                headers=self._headers(),
+                json={"state": "closed", "state_reason": "completed"},
+                timeout=15,
+            )
+            print(f"[GitHub] Plan issue #{issue_number} closed (SHIP)")
+        except Exception as e:
+            print(f"[GitHub] close_plan_issue failed: {e}")
+
     def post_handoff_comment(self, day: int, day_dir: Path) -> None:
         if not self._available:
             return

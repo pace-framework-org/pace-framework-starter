@@ -190,6 +190,20 @@ class TrackerAdapter(ABC):
             status:  ``"done"`` (SHIP) or ``"in_progress"`` (FORGE started).
         """
 
+    def close_plan_issue(self, issue_number: int) -> None:
+        """Close the sprint-plan issue (e.g. #45) after a story SHIPs.
+
+        This is distinct from the PACE placeholder ticket stored in
+        story-ticket.yaml. GitHub only auto-closes issues on merge to the
+        default branch; since story PRs target pace/sprint-N we must close
+        plan issues explicitly.
+
+        Default: no-op (trackers that don't support it are unaffected).
+
+        Args:
+            issue_number: The GitHub/GitLab/Jira issue number from plan.yaml.
+        """
+
     @abstractmethod
     def post_handoff_comment(self, day: int, day_dir: Path) -> None:
         """Post the final FORGE handoff note as a comment on the story ticket.

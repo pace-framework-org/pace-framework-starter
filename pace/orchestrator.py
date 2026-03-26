@@ -735,6 +735,10 @@ def main() -> None:
     try:
         tracker.update_story_status(day, day_dir, "done")
         tracker.post_handoff_comment(day, day_dir)
+        # Close the sprint-plan issue explicitly — GitHub auto-close via "Closes #N"
+        # only fires on merge to the default branch, but story PRs target pace/sprint-N.
+        if day_plan.get("issue"):
+            tracker.close_plan_issue(day_plan["issue"])
     except Exception as exc:
         print(f"[PACE] Day {day}: Tracker SHIP updates failed (non-fatal): {exc}")
     sys.exit(0)
