@@ -330,15 +330,16 @@ def _checkpoint_path(day: int) -> Path:
     return PACE_DIR / f"day-{day}" / "forge_checkpoint.json"
 
 
-def _save_checkpoint(day: int, messages: list, red_phase_confirmed: bool, iteration: int) -> None:
+def _save_checkpoint(day: int, messages: list, red_phase_confirmed: bool, iteration: int, checkpoint_cap: int = 0) -> None:
     path = _checkpoint_path(day)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
+        capped_iteration = min(iteration, checkpoint_cap) if checkpoint_cap > 0 else iteration
         path.write_text(
             json.dumps({
                 "messages": messages,
                 "red_phase_confirmed": red_phase_confirmed,
-                "iteration": iteration,
+                "iteration": capped_iteration,
             }, ensure_ascii=False),
             encoding="utf-8",
         )
@@ -797,6 +798,8 @@ You have access to tools: {tools_list}."""
     fork_on = cfg.forge.fork_enabled
     tools = _build_tools(tdd_on, fork_enabled=fork_on)
     max_iterations = cfg.forge.max_iterations
+    retry_iterations = cfg.forge.retry_iterations  # e.g. 25
+    checkpoint_cap = int(max_iterations * (100 - retry_iterations) / 100)
     # Item 24: resolve compression model; None disables compression
     compression_model: str | None = cfg.forge.compression_model or cfg.llm.analysis_model or None
     _compressed: bool = bool(hold_reason)  # skip on retry — history already compacted
@@ -828,8 +831,20 @@ You have access to tools: {tools_list}."""
 
     # Stage 1 (Item 21): track paths written this session; rebuild from checkpoint on retry
     _written_paths: set[str] = _rebuild_written_paths(messages)
+    _warned: bool = False
 
     for iteration in range(start_iteration, max_iterations):
+        if not _warned and iteration >= checkpoint_cap:
+            warning = (
+                f"⚠️ Iteration budget notice: you have used {iteration} of {max_iterations} "
+                f"iterations. You have approximately {max_iterations - iteration} iterations "
+                f"remaining. If implementation is not complete, call git_commit with your "
+                f"current progress now, then complete_handoff with what is done. "
+                f"Do not start new features."
+            )
+            messages.append({"role": "user", "content": warning})
+            _warned = True
+
         # Stage 1 (Items 21+22): evict stale reads and dedup bash output before each API call
         _evict_stale_reads(messages, _written_paths)
         _dedup_bash_results(messages)
@@ -953,7 +968,7 @@ You have access to tools: {tools_list}."""
 
         # Persist conversation state after each iteration. If this run exhausts
         # max_iterations, the next retry can resume from here rather than restart.
-        _save_checkpoint(day, messages, red_phase_confirmed, iteration + 1)
+        _save_checkpoint(day, messages, red_phase_confirmed, iteration + 1, checkpoint_cap=checkpoint_cap)
 
     if not handoff_data:
         raise RuntimeError(f"FORGE did not call complete_handoff after {max_iterations} iterations")

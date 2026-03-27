@@ -98,6 +98,7 @@ def run_prime(
     target: str,
     recent_gates: list[str],
     plan_diff: str | None = None,
+    issue_body: str | None = None,
 ) -> dict:
     """Generate a Story Card for the given day.
 
@@ -109,11 +110,17 @@ def run_prime(
                       when PACE_REPLAN=true. When present, PRIME uses it to
                       understand what changed in the sprint plan so the new
                       story card reflects the updated scope correctly.
+        issue_body:   Optional GitHub issue body to anchor PRIME to the correct
+                      feature scope. When provided, prepended to the user message.
     """
     cfg = load_config()
     adapter = get_analysis_adapter()
 
-    system_prompt = f"""You are the Product Agent (PRIME) for {cfg.product_name}.
+    system_prompt = f"""CRITICAL: The story you generate MUST implement exactly the following target and nothing else. Do not substitute, reinterpret, or replace with a different feature:
+
+Target: {target}
+
+You are the Product Agent (PRIME) for {cfg.product_name}.
 
 {cfg.product_description}
 
@@ -166,7 +173,9 @@ Rules:
         if plan_diff else ""
     )
 
-    user_message = f"""Day: {day}
+    issue_body_section = f"GitHub Issue Body:\n{issue_body}\n\n" if issue_body else ""
+
+    user_message = f"""{issue_body_section}Day: {day}
 Today's story target from the plan: {target}
 {plan_diff_section}{deferred_section}{product_section}
 Recent gate reports for context:

@@ -247,8 +247,33 @@ def run_cycle(day: int, day_plan: dict, recent_gates: list[str], ci: CIAdapter, 
         story_card = yaml.safe_load(story_file.read_text())
     else:
         print(f"[PACE] Day {day}: Invoking PRIME...")
+        # Fetch GitHub issue body to anchor PRIME to the correct feature scope.
+        issue_body: str | None = None
+        issue_number = day_plan.get("issue")
+        if issue_number:
+            try:
+                import os
+                import requests as _req
+                _gh_token = os.environ.get("GITHUB_TOKEN", "")
+                _gh_repo = os.environ.get("GITHUB_REPOSITORY", "")
+                if _gh_token and _gh_repo:
+                    _resp = _req.get(
+                        f"https://api.github.com/repos/{_gh_repo}/issues/{issue_number}",
+                        headers={
+                            "Authorization": f"Bearer {_gh_token}",
+                            "Accept": "application/vnd.github+json",
+                            "X-GitHub-Api-Version": "2022-11-28",
+                        },
+                        timeout=15,
+                    )
+                    if _resp.status_code == 200:
+                        issue_body = (_resp.json().get("body") or "").strip() or None
+                        if issue_body:
+                            print(f"[PACE] Day {day}: Fetched GitHub issue #{issue_number} body for PRIME context.")
+            except Exception as _exc:
+                print(f"[PACE] Day {day}: Could not fetch issue body (non-fatal): {_exc}")
         try:
-            story_card = run_prime(day, day_plan["target"], recent_gates)
+            story_card = run_prime(day, day_plan["target"], recent_gates, issue_body=issue_body)
         except Exception as exc:
             import traceback
             print(f"[PACE] PRIME failed — cannot continue cycle:\n{traceback.format_exc()}")

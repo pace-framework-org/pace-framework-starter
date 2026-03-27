@@ -347,3 +347,5 @@ forge:
   # Raise for complex multi-file stories; lower to cap cost on simpler ones.
   # Default: 35.
   max_iterations: 35
+  retry_iterations: 25
+  fork_enabled: true
