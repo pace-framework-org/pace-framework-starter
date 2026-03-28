@@ -99,6 +99,214 @@ def build_shipped_summary(current_day: int) -> str:
     return "## Shipped Stories (summary — do not re-plan)\n\n" + "\n".join(lines) + "\n"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Feature: Deferred-scope clearance
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _find_pending_deferred(current_day: int) -> "tuple[int, dict] | None":
+    """Return (src_day, day_plan) for the oldest prior day with uncleared deferred scope.
+
+    A day has uncleared deferred scope when:
+      - deferred_scope.yaml exists and contains at least one deferred AC
+      - deferred_cleared.yaml does NOT exist (clearance not yet run)
+    """
+    plan = load_plan()
+    for d in range(1, current_day):
+        day_dir = PACE_DIR / f"day-{d}"
+        deferred_file = day_dir / "deferred_scope.yaml"
+        cleared_file = day_dir / "deferred_cleared.yaml"
+        if not deferred_file.exists() or cleared_file.exists():
+            continue
+        data = yaml.safe_load(deferred_file.read_text()) or {}
+        if not data.get("deferred"):
+            continue
+        try:
+            return d, get_day_plan(plan, d)
+        except ValueError:
+            continue
+    return None
+
+
+def _run_deferred_clearance(
+    src_day: int,
+    day_plan: dict,
+    ci: "CIAdapter",
+    tracker: "TrackerAdapter",
+    registry: "PluginRegistry | None",
+) -> "tuple[bool, str]":
+    """Run FORGE + GATE against the uncleared deferred ACs from src_day.
+
+    Checks out the story branch (when present), builds a minimal story card
+    targeting only the deferred ACs, then runs FORGE → CI wait → GATE.
+    On GATE SHIP writes deferred_cleared.yaml and updates PROGRESS.md.
+
+    Returns:
+        (cleared, hold_reason) — cleared=True on GATE SHIP.
+    """
+    day_dir = PACE_DIR / f"day-{src_day}"
+    data = yaml.safe_load((day_dir / "deferred_scope.yaml").read_text()) or {}
+    deferred_acs: list[str] = data.get("deferred", [])
+
+    print(f"[PACE] Deferred clearance: Day {src_day} — {len(deferred_acs)} uncleared AC(s).")
+
+    story_branch = day_plan.get("story_branch")
+    if story_branch:
+        try:
+            _setup_story_branch(story_branch)
+        except NameError:
+            pass  # Platform does not use per-story branches
+
+    original_story: dict = {}
+    story_file = day_dir / "story.md"
+    if story_file.exists():
+        original_story = yaml.safe_load(story_file.read_text()) or {}
+    deferred_story = {**original_story, "acceptance": deferred_acs}
+
+    _clearance_cost_before = spend_tracker.total_usd()
+    hold_reason: str = ""
+
+    for attempt in range(1, MAX_RETRIES + 2):
+        print(f"[PACE] Deferred clearance Day {src_day}: FORGE attempt {attempt}/{MAX_RETRIES + 1}...")
+        _forge_cost_before = spend_tracker.total_usd()
+        try:
+            handoff = run_forge(src_day, deferred_story, hold_reason or None)
+        except Exception as exc:
+            print(f"[PACE] Deferred clearance FORGE failed: {exc}")
+            hold_reason = f"FORGE exception: {exc}"
+            if attempt > MAX_RETRIES:
+                return False, hold_reason
+            continue
+
+        handoff["forge_cost_usd"] = round(spend_tracker.total_usd() - _forge_cost_before, 4)
+        handoff_file = day_dir / "deferred_handoff.md"
+        handoff_file.write_text(yaml.dump(handoff, default_flow_style=False, allow_unicode=True))
+        commit_artifact(handoff_file, f"Day {src_day}: deferred clearance FORGE handoff (attempt {attempt})")
+
+        commit_sha = handoff.get("commit", "")
+        ci_result: dict | None = None
+        if commit_sha:
+            print(f"[PACE] Deferred clearance: waiting for CI on {commit_sha}...")
+            ci_result = ci.wait_for_commit_ci(commit_sha)
+            print(f"[PACE] CI result: {ci_result['conclusion']}")
+
+        print(f"[PACE] Deferred clearance Day {src_day}: GATE...")
+        try:
+            gate_report = run_gate(src_day, deferred_story, handoff, ci_result=ci_result)
+        except Exception as exc:
+            gate_report = {
+                "day": src_day, "agent": "GATE", "criteria_results": [], "blockers": [str(exc)],
+                "deferred": [], "gate_decision": "HOLD", "hold_reason": f"GATE error: {exc}",
+            }
+
+        gate_file = day_dir / "deferred_gate.md"
+        gate_file.write_text(yaml.dump(gate_report, default_flow_style=False, allow_unicode=True))
+
+        if gate_report.get("gate_decision") == "HOLD":
+            hold_reason = gate_report.get("hold_reason", "")
+            print(f"[PACE] Deferred clearance Day {src_day}: GATE HOLD (attempt {attempt}): {hold_reason}")
+            commit_artifact(gate_file, f"Day {src_day}: deferred clearance GATE — HOLD attempt {attempt}")
+            if attempt > MAX_RETRIES:
+                return False, hold_reason
+            continue
+
+        commit_artifact(gate_file, f"Day {src_day}: deferred clearance GATE — PASS attempt {attempt}")
+        break
+
+    clearance_cost = round(spend_tracker.total_usd() - _clearance_cost_before, 4)
+    cleared_file = day_dir / "deferred_cleared.yaml"
+    cleared_file.write_text(yaml.dump({
+        "src_day": src_day,
+        "cleared_acs": len(deferred_acs),
+        "clearance_cost_usd": clearance_cost,
+        "cleared_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }, default_flow_style=False, allow_unicode=True))
+    commit_artifact(cleared_file, f"Day {src_day}: deferred scope cleared — {len(deferred_acs)} AC (${clearance_cost:.4f})")
+
+    update_progress_md(src_day)
+    commit_artifact(PROGRESS_FILE, f"Day {src_day}: PROGRESS.md update — deferred scope cleared")
+
+    if day_plan.get("story_branch") and day_plan.get("issue"):
+        try:
+            ci.open_story_pr(src_day, day_plan, day_dir)
+        except Exception as exc:
+            print(f"[PACE] Deferred clearance: open_story_pr failed (non-fatal): {exc}")
+
+    print(f"[PACE] Deferred clearance Day {src_day}: CLEARED — {len(deferred_acs)} AC (cost ${clearance_cost:.4f})")
+    return True, ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Feature: Skipped-story recovery
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _recover_skipped_stories(current_day: int) -> bool:
+    """Insert unstarted story days before the final gate in plan.yaml.
+
+    A story day is considered skipped when:
+      - It is a non-human-gate day with day_num < current_day
+      - Its artifact directory does not exist (never attempted)
+      - The same issue or story_branch is not already scheduled at a future day
+        (guards against double-insertion across runs)
+
+    Skipped entries are removed from their original positions, re-inserted
+    immediately before the final (highest-numbered) human gate, and the gate
+    day number is incremented accordingly.
+
+    Returns True if plan.yaml was modified.
+    """
+    plan = load_plan()
+    days: list[dict] = plan.get("days", [])
+
+    future_issues: set = {d["issue"] for d in days if d.get("issue") and d["day"] >= current_day}
+    future_branches: set = {d["story_branch"] for d in days if d.get("story_branch") and d["day"] >= current_day}
+
+    skipped: list[dict] = []
+    skipped_day_nums: set[int] = set()
+    for d in days:
+        if d.get("human_gate"):
+            continue
+        day_num = d["day"]
+        if day_num >= current_day:
+            continue
+        if (PACE_DIR / f"day-{day_num}").exists():
+            continue  # Was attempted — not skipped
+        if d.get("issue") in future_issues or d.get("story_branch") in future_branches:
+            continue  # Already recovered in a prior run
+        skipped.append(d)
+        skipped_day_nums.add(day_num)
+
+    if not skipped:
+        return False
+
+    print(f"[PACE] Auto-recovery: {len(skipped)} skipped story day(s) detected — {[d['day'] for d in skipped]}")
+
+    final_gates = [d for d in days if d.get("human_gate")]
+    if not final_gates:
+        print("[PACE] Auto-recovery: no final gate in plan.yaml — cannot re-insert skipped stories.")
+        return False
+    final_gate = max(final_gates, key=lambda d: d["day"])
+
+    remaining = [d for d in days if d["day"] not in skipped_day_nums and d["day"] != final_gate["day"]]
+    next_day_num = (max(d["day"] for d in remaining) if remaining else current_day) + 1
+
+    for s in skipped:
+        new_entry = {**s, "day": next_day_num, "week": (next_day_num - 1) // 7 + 1}
+        remaining.append(new_entry)
+        print(f"[PACE] Auto-recovery: Day {s['day']} (#{s.get('issue')}) → re-inserted as Day {next_day_num}")
+        next_day_num += 1
+
+    remaining.append({**final_gate, "day": next_day_num, "week": (next_day_num - 1) // 7 + 1})
+
+    plan["days"] = remaining
+    PLAN_FILE.write_text(yaml.dump(plan, default_flow_style=False, allow_unicode=True, sort_keys=False))
+    commit_artifact(
+        PLAN_FILE,
+        f"plan: auto-recover {len(skipped)} skipped story day(s) before final gate (Day {next_day_num})",
+    )
+    print(f"[PACE] Auto-recovery: plan updated — final gate → Day {next_day_num}.")
+    return True
+
+
 def _record_run_attempt(day: int, day_dir: Path, outcome: str, hold_reason: str) -> None:
     """Append this GitHub Actions run's cost and outcome to .pace/day-N/attempts.yaml.
 
@@ -721,6 +929,27 @@ def main() -> None:
         ci.open_review_pr(day, PACE_DIR, context_note=context_note)
         print("[PACE] Review gate opened. Loop will pause until human approval.")
         sys.exit(0)
+
+    # Recover any skipped story days — updates plan.yaml for future runs, no-op for this run.
+    _recover_skipped_stories(day)
+
+    # Clear pending deferred scope from prior days before starting today's cycle.
+    # If clearance fails (HOLD), pause and escalate before proceeding.
+    _pending_deferred = _find_pending_deferred(day)
+    if _pending_deferred:
+        _src_day, _deferred_plan = _pending_deferred
+        _cleared, _deferred_reason = _run_deferred_clearance(
+            _src_day, _deferred_plan, ci, tracker, _plugin_registry
+        )
+        if not _cleared:
+            _src_day_dir = PACE_DIR / f"day-{_src_day}"
+            tracker.open_escalation_issue(_src_day, _src_day_dir, hold_reason=_deferred_reason)
+            ci.set_variable("PACE_PAUSED", "true")
+            print(
+                f"[PACE] Deferred clearance for Day {_src_day} HOLD — "
+                f"PACE_PAUSED set to true. Resolve before proceeding."
+            )
+            sys.exit(1)
 
     recent_gates = get_recent_gate_reports(day)
     _plugin_registry.fire_hook("day_start", {"day": day, "target": day_plan.get("target", "")})
